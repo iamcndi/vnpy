@@ -35,7 +35,9 @@ dependencies = [
     "plotly>=6.0.0",
     "tqdm>=4.67.1",
     "loguru>=0.7.3",
-    "nbformat>=5.10.4"
+    "nbformat>=5.10.4",
+    "requests>=2.32.0",
+    "qrcode>=7.4.2"
 ]
 keywords = ["quant", "quantitative", "investment", "trading", "algotrading"]
 
@@ -51,6 +53,7 @@ alpha = [
 ]
 dev = [
     "pandas-stubs>=2.2.3.250308",
+    "scipy-stubs>=1.16.3.0",
     "hatchling>=1.27.0",
     "babel>=2.17.0",
 ]
@@ -115,6 +118,7 @@ warn_no_return = true
 module = [
     "polars",
     "lightgbm",
-    "hatchling.*"
+    "hatchling.*",
+    "qrcode"
 ]
 ignore_missing_imports = true
