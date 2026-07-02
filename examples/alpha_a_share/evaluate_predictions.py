@@ -51,6 +51,23 @@ STOCK_LIST: list[tuple[str, str, str]] = [
 ]
 
 
+SIGNAL_COLUMNS = ("datetime", "vt_symbol", "signal", "predicted_return")
+
+
+def _normalize_signal_df(df: pl.DataFrame) -> pl.DataFrame:
+    """统一不同版本信号文件的列结构"""
+    if "signal" not in df.columns:
+        if "predicted_return" in df.columns:
+            df = df.with_columns(pl.col("predicted_return").alias("signal"))
+        else:
+            raise ValueError(f"信号文件缺少 signal 列: {df.columns}")
+
+    if "predicted_return" not in df.columns:
+        df = df.with_columns(pl.col("signal").alias("predicted_return"))
+
+    return df.select(list(SIGNAL_COLUMNS))
+
+
 def load_all_signals(lab: AlphaLab) -> pl.DataFrame:
     """加载所有已保存的预测信号"""
     files = sorted(lab.signal_path.glob("lgb_pred_*.parquet"))
@@ -58,7 +75,10 @@ def load_all_signals(lab: AlphaLab) -> pl.DataFrame:
         print("✗ 没有找到预测信号文件")
         return pl.DataFrame()
 
-    dfs = [pl.read_parquet(f).with_columns(pl.lit(f.stem).alias("filename")) for f in files]
+    dfs = [
+        _normalize_signal_df(pl.read_parquet(f)).with_columns(pl.lit(f.stem).alias("filename"))
+        for f in files
+    ]
     all_signals = pl.concat(dfs)
     print(f"  ✓ 加载 {len(files)} 个信号文件, 共 {len(all_signals)} 条记录")
     return all_signals

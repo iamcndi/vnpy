@@ -1,0 +1,506 @@
+[
+  {
+    "stop_loss": 0.05,
+    "take_profit": 0.25,
+    "annual_return": 109.08789432523805,
+    "sharpe_ratio": 2.7167327850671423,
+    "max_ddpercent": -12.14088527347964,
+    "return_drawdown_ratio": 4.813760186229386,
+    "total_return": 105.59708170683044
+  },
+  {
+    "stop_loss": 0.05,
+    "take_profit": 0.3,
+    "annual_return": 109.08789432523805,
+    "sharpe_ratio": 2.7167327850671423,
+    "max_ddpercent": -12.14088527347964,
+    "return_drawdown_ratio": 4.813760186229386,
+    "total_return": 105.59708170683044
+  },
+  {
+    "stop_loss": 0.05,
+    "take_profit": 0.2,
+    "annual_return": 109.04414004142595,
+    "sharpe_ratio": 2.715308588749664,
+    "max_ddpercent": -12.14088527347964,
+    "return_drawdown_ratio": 4.811829425436043,
+    "total_return": 105.55472756010032
+  },
+  {
+    "stop_loss": 0.05,
+    "take_profit": 0.1,
+    "annual_return": 106.31788533513958,
+    "sharpe_ratio": 2.6492311755336875,
+    "max_ddpercent": -12.103123474282128,
+    "return_drawdown_ratio": 4.610571201448458,
+    "total_return": 102.91571300441511
+  },
+  {
+    "stop_loss": 0.05,
+    "take_profit": 0.12,
+    "annual_return": 105.1061473729725,
+    "sharpe_ratio": 2.6300998439934595,
+    "max_ddpercent": -12.102933498208934,
+    "return_drawdown_ratio": 4.728807557084353,
+    "total_return": 101.74275065703738
+  },
+  {
+    "stop_loss": 0.05,
+    "take_profit": 0.15,
+    "annual_return": 102.58937359151057,
+    "sharpe_ratio": 2.6036197231410796,
+    "max_ddpercent": -12.121776575720922,
+    "return_drawdown_ratio": 4.654426196904625,
+    "total_return": 99.30651363658222
+  },
+  {
+    "stop_loss": 0.07,
+    "take_profit": 0.25,
+    "annual_return": 104.10552689540229,
+    "sharpe_ratio": 2.5839715702845236,
+    "max_ddpercent": -12.540231336577834,
+    "return_drawdown_ratio": 4.682770074554209,
+    "total_return": 100.77415003474943
+  },
+  {
+    "stop_loss": 0.07,
+    "take_profit": 0.3,
+    "annual_return": 104.10552689540229,
+    "sharpe_ratio": 2.5839715702845236,
+    "max_ddpercent": -12.540231336577834,
+    "return_drawdown_ratio": 4.682770074554209,
+    "total_return": 100.77415003474943
+  },
+  {
+    "stop_loss": 0.07,
+    "take_profit": 0.2,
+    "annual_return": 103.61677844023858,
+    "sharpe_ratio": 2.576194004963706,
+    "max_ddpercent": -12.540231336577834,
+    "return_drawdown_ratio": 4.660785683253594,
+    "total_return": 100.30104153015094
+  },
+  {
+    "stop_loss": 0.07,
+    "take_profit": 0.1,
+    "annual_return": 105.38706376522568,
+    "sharpe_ratio": 2.572051435213574,
+    "max_ddpercent": -12.615331210240853,
+    "return_drawdown_ratio": 4.649810433208784,
+    "total_return": 102.01467772473846
+  },
+  {
+    "stop_loss": 0.08,
+    "take_profit": 0.25,
+    "annual_return": 104.18826493174919,
+    "sharpe_ratio": 2.5669484046281323,
+    "max_ddpercent": -12.761944641037637,
+    "return_drawdown_ratio": 4.5131548815030404,
+    "total_return": 100.85424045393322
+  },
+  {
+    "stop_loss": 0.08,
+    "take_profit": 0.3,
+    "annual_return": 104.18826493174919,
+    "sharpe_ratio": 2.5669484046281323,
+    "max_ddpercent": -12.761944641037637,
+    "return_drawdown_ratio": 4.5131548815030404,
+    "total_return": 100.85424045393322
+  },
+  {
+    "stop_loss": 0.08,
+    "take_profit": 0.2,
+    "annual_return": 103.70029462881209,
+    "sharpe_ratio": 2.5592367168284396,
+    "max_ddpercent": -12.761944641037637,
+    "return_drawdown_ratio": 4.492017322909745,
+    "total_return": 100.38188520069009
+  },
+  {
+    "stop_loss": 0.05,
+    "take_profit": 0.08,
+    "annual_return": 100.00826010684592,
+    "sharpe_ratio": 2.551625515821804,
+    "max_ddpercent": -12.105776772360354,
+    "return_drawdown_ratio": 4.475357632382895,
+    "total_return": 96.80799578342685
+  },
+  {
+    "stop_loss": 0.05,
+    "take_profit": 0.05,
+    "annual_return": 99.87250711588726,
+    "sharpe_ratio": 2.536695603461137,
+    "max_ddpercent": -13.097971074609783,
+    "return_drawdown_ratio": 4.104686383347726,
+    "total_return": 96.67658688817886
+  },
+  {
+    "stop_loss": 0.08,
+    "take_profit": 0.1,
+    "annual_return": 103.8430558944463,
+    "sharpe_ratio": 2.535313565014045,
+    "max_ddpercent": -12.836527491636984,
+    "return_drawdown_ratio": 4.414031414079665,
+    "total_return": 100.52007810582401
+  },
+  {
+    "stop_loss": 0.07,
+    "take_profit": 0.05,
+    "annual_return": 101.34488300336231,
+    "sharpe_ratio": 2.5007849044383055,
+    "max_ddpercent": -13.072863950176728,
+    "return_drawdown_ratio": 4.195690911607093,
+    "total_return": 98.10184674725471
+  },
+  {
+    "stop_loss": 0.07,
+    "take_profit": 0.12,
+    "annual_return": 99.9958262201287,
+    "sharpe_ratio": 2.4941273906037775,
+    "max_ddpercent": -12.54035747728942,
+    "return_drawdown_ratio": 4.577844202178167,
+    "total_return": 96.79595978108459
+  },
+  {
+    "stop_loss": 0.07,
+    "take_profit": 0.08,
+    "annual_return": 99.81757870117525,
+    "sharpe_ratio": 2.4928911514933256,
+    "max_ddpercent": -12.615226131695845,
+    "return_drawdown_ratio": 4.48642852089945,
+    "total_return": 96.62341618273764
+  },
+  {
+    "stop_loss": 0.08,
+    "take_profit": 0.05,
+    "annual_return": 100.4466895759164,
+    "sharpe_ratio": 2.4695455538710296,
+    "max_ddpercent": -13.406182700984882,
+    "return_drawdown_ratio": 4.028018118708199,
+    "total_return": 97.23239550948706
+  },
+  {
+    "stop_loss": 0.07,
+    "take_profit": 0.15,
+    "annual_return": 97.16193838898185,
+    "sharpe_ratio": 2.463898481406518,
+    "max_ddpercent": -12.540275731315798,
+    "return_drawdown_ratio": 4.471184689270384,
+    "total_return": 94.05275636053443
+  },
+  {
+    "stop_loss": 0.03,
+    "take_profit": 0.25,
+    "annual_return": 94.64992636481446,
+    "sharpe_ratio": 2.4613311416055343,
+    "max_ddpercent": -12.801079947943927,
+    "return_drawdown_ratio": 4.601712031554637,
+    "total_return": 91.62112872114041
+  },
+  {
+    "stop_loss": 0.03,
+    "take_profit": 0.3,
+    "annual_return": 94.64992636481446,
+    "sharpe_ratio": 2.4613311416055343,
+    "max_ddpercent": -12.801079947943927,
+    "return_drawdown_ratio": 4.601712031554637,
+    "total_return": 91.62112872114041
+  },
+  {
+    "stop_loss": 0.08,
+    "take_profit": 0.12,
+    "annual_return": 98.56060545751592,
+    "sharpe_ratio": 2.4588906789123772,
+    "max_ddpercent": -12.761899809542864,
+    "return_drawdown_ratio": 4.347415014629062,
+    "total_return": 95.40666608287542
+  },
+  {
+    "stop_loss": 0.1,
+    "take_profit": 0.25,
+    "annual_return": 96.8594738180326,
+    "sharpe_ratio": 2.4563718367235756,
+    "max_ddpercent": -13.664223964076728,
+    "return_drawdown_ratio": 3.8530922893974338,
+    "total_return": 93.75997065585555
+  },
+  {
+    "stop_loss": 0.1,
+    "take_profit": 0.3,
+    "annual_return": 96.8594738180326,
+    "sharpe_ratio": 2.4563718367235756,
+    "max_ddpercent": -13.664223964076728,
+    "return_drawdown_ratio": 3.8530922893974338,
+    "total_return": 93.75997065585555
+  },
+  {
+    "stop_loss": 0.03,
+    "take_profit": 0.2,
+    "annual_return": 94.21821856012774,
+    "sharpe_ratio": 2.4540502688700254,
+    "max_ddpercent": -12.801079947943927,
+    "return_drawdown_ratio": 4.5807231615656,
+    "total_return": 91.20323556620366
+  },
+  {
+    "stop_loss": 0.1,
+    "take_profit": 0.1,
+    "annual_return": 97.74948246483933,
+    "sharpe_ratio": 2.450009143135143,
+    "max_ddpercent": -13.664209899282675,
+    "return_drawdown_ratio": 3.804206798312525,
+    "total_return": 94.62149902596447
+  },
+  {
+    "stop_loss": 0.1,
+    "take_profit": 0.2,
+    "annual_return": 96.3863047027184,
+    "sharpe_ratio": 2.4485741163087633,
+    "max_ddpercent": -13.664223964076728,
+    "return_drawdown_ratio": 3.8342695124616104,
+    "total_return": 93.30194295223141
+  },
+  {
+    "stop_loss": 0.08,
+    "take_profit": 0.15,
+    "annual_return": 97.23902295418965,
+    "sharpe_ratio": 2.4478086339451655,
+    "max_ddpercent": -12.761989550335961,
+    "return_drawdown_ratio": 4.31003495445946,
+    "total_return": 94.12737421965558
+  },
+  {
+    "stop_loss": 0.08,
+    "take_profit": 0.08,
+    "annual_return": 97.88705120426141,
+    "sharpe_ratio": 2.4464530756769323,
+    "max_ddpercent": -12.836477678080016,
+    "return_drawdown_ratio": 4.247334432282688,
+    "total_return": 94.75466556572505
+  },
+  {
+    "stop_loss": 0.15,
+    "take_profit": 0.25,
+    "annual_return": 94.21256426927785,
+    "sharpe_ratio": 2.4135640144235997,
+    "max_ddpercent": -14.691292707288728,
+    "return_drawdown_ratio": 3.543804854819866,
+    "total_return": 91.19776221266096
+  },
+  {
+    "stop_loss": 0.15,
+    "take_profit": 0.3,
+    "annual_return": 94.21256426927785,
+    "sharpe_ratio": 2.4135640144235997,
+    "max_ddpercent": -14.691292707288728,
+    "return_drawdown_ratio": 3.543804854819866,
+    "total_return": 91.19776221266096
+  },
+  {
+    "stop_loss": 0.12,
+    "take_profit": 0.1,
+    "annual_return": 95.60838495906363,
+    "sharpe_ratio": 2.40835160826608,
+    "max_ddpercent": -14.669122088164599,
+    "return_drawdown_ratio": 3.52061086838294,
+    "total_return": 92.54891664037359
+  },
+  {
+    "stop_loss": 0.15,
+    "take_profit": 0.2,
+    "annual_return": 93.74701756995938,
+    "sharpe_ratio": 2.4057560617129505,
+    "max_ddpercent": -14.691292707288728,
+    "return_drawdown_ratio": 3.526293319431925,
+    "total_return": 90.74711300772069
+  },
+  {
+    "stop_loss": 0.12,
+    "take_profit": 0.25,
+    "annual_return": 93.12642779697106,
+    "sharpe_ratio": 2.3928554345997046,
+    "max_ddpercent": -14.67355210443948,
+    "return_drawdown_ratio": 3.5035273742918784,
+    "total_return": 90.14638210746799
+  },
+  {
+    "stop_loss": 0.12,
+    "take_profit": 0.3,
+    "annual_return": 93.12642779697106,
+    "sharpe_ratio": 2.3928554345997046,
+    "max_ddpercent": -14.67355210443948,
+    "return_drawdown_ratio": 3.5035273742918784,
+    "total_return": 90.14638210746799
+  },
+  {
+    "stop_loss": 0.03,
+    "take_profit": 0.1,
+    "annual_return": 92.61764697650648,
+    "sharpe_ratio": 2.3923225934283088,
+    "max_ddpercent": -12.875852239764662,
+    "return_drawdown_ratio": 4.346379780371074,
+    "total_return": 89.65388227325828
+  },
+  {
+    "stop_loss": 0.1,
+    "take_profit": 0.05,
+    "annual_return": 94.1087427048358,
+    "sharpe_ratio": 2.3876130510665674,
+    "max_ddpercent": -14.3765231904736,
+    "return_drawdown_ratio": 3.5237230192740223,
+    "total_return": 91.09726293828106
+  },
+  {
+    "stop_loss": 0.15,
+    "take_profit": 0.1,
+    "annual_return": 94.12404192054808,
+    "sharpe_ratio": 2.386226482195534,
+    "max_ddpercent": -14.687835026236906,
+    "return_drawdown_ratio": 3.468010011844207,
+    "total_return": 91.11207257909054
+  },
+  {
+    "stop_loss": 0.12,
+    "take_profit": 0.2,
+    "annual_return": 92.66368883475984,
+    "sharpe_ratio": 2.385059191484769,
+    "max_ddpercent": -14.67355210443948,
+    "return_drawdown_ratio": 3.486118582184087,
+    "total_return": 89.69845079204752
+  },
+  {
+    "stop_loss": 0.1,
+    "take_profit": 0.12,
+    "annual_return": 93.0871052331094,
+    "sharpe_ratio": 2.3785542809182423,
+    "max_ddpercent": -13.664979424786438,
+    "return_drawdown_ratio": 3.759330390584565,
+    "total_return": 90.1083178656499
+  },
+  {
+    "stop_loss": 0.03,
+    "take_profit": 0.12,
+    "annual_return": 90.8319027890548,
+    "sharpe_ratio": 2.375568767825805,
+    "max_ddpercent": -12.800858781500935,
+    "return_drawdown_ratio": 4.375294906626976,
+    "total_return": 87.92528189980504
+  },
+  {
+    "stop_loss": 0.03,
+    "take_profit": 0.08,
+    "annual_return": 90.574441097468,
+    "sharpe_ratio": 2.371125600315123,
+    "max_ddpercent": -12.875482772903812,
+    "return_drawdown_ratio": 4.262124697766472,
+    "total_return": 87.67605898234902
+  },
+  {
+    "stop_loss": 0.1,
+    "take_profit": 0.08,
+    "annual_return": 92.1126246923747,
+    "sharpe_ratio": 2.3600822198275084,
+    "max_ddpercent": -13.663809846705345,
+    "return_drawdown_ratio": 3.662742760797621,
+    "total_return": 89.1650207022187
+  },
+  {
+    "stop_loss": 0.03,
+    "take_profit": 0.15,
+    "annual_return": 88.71782194842005,
+    "sharpe_ratio": 2.3544674117884283,
+    "max_ddpercent": -12.80103352568246,
+    "return_drawdown_ratio": 4.427244817138735,
+    "total_return": 85.87885164607061
+  },
+  {
+    "stop_loss": 0.1,
+    "take_profit": 0.15,
+    "annual_return": 90.15041699818808,
+    "sharpe_ratio": 2.3364975266795525,
+    "max_ddpercent": -13.704688743124649,
+    "return_drawdown_ratio": 3.6704986580547665,
+    "total_return": 87.26560365424605
+  },
+  {
+    "stop_loss": 0.12,
+    "take_profit": 0.12,
+    "annual_return": 89.63424866928169,
+    "sharpe_ratio": 2.317511270437331,
+    "max_ddpercent": -14.67042627041354,
+    "return_drawdown_ratio": 3.4249196408174867,
+    "total_return": 86.76595271186467
+  },
+  {
+    "stop_loss": 0.12,
+    "take_profit": 0.05,
+    "annual_return": 90.04273383095017,
+    "sharpe_ratio": 2.3082906091044015,
+    "max_ddpercent": -15.678413016029369,
+    "return_drawdown_ratio": 3.1439216609310496,
+    "total_return": 87.16136634835976
+  },
+  {
+    "stop_loss": 0.12,
+    "take_profit": 0.08,
+    "annual_return": 89.0926196744868,
+    "sharpe_ratio": 2.3074222525432497,
+    "max_ddpercent": -14.668555893310653,
+    "return_drawdown_ratio": 3.3423665790145303,
+    "total_return": 86.24165584490322
+  },
+  {
+    "stop_loss": 0.15,
+    "take_profit": 0.05,
+    "annual_return": 89.14323057089058,
+    "sharpe_ratio": 2.2961126934925993,
+    "max_ddpercent": -15.696578957153351,
+    "return_drawdown_ratio": 3.1112465182511104,
+    "total_return": 86.29064719262207
+  },
+  {
+    "stop_loss": 0.15,
+    "take_profit": 0.12,
+    "annual_return": 88.19645685697863,
+    "sharpe_ratio": 2.295120709028487,
+    "max_ddpercent": -14.688463347770286,
+    "return_drawdown_ratio": 3.372133107618669,
+    "total_return": 85.37417023755532
+  },
+  {
+    "stop_loss": 0.15,
+    "take_profit": 0.15,
+    "annual_return": 87.63402626102119,
+    "sharpe_ratio": 2.294330340772534,
+    "max_ddpercent": -14.711396922450215,
+    "return_drawdown_ratio": 3.3791141081123928,
+    "total_return": 84.82973742066852
+  },
+  {
+    "stop_loss": 0.15,
+    "take_profit": 0.08,
+    "annual_return": 87.9059013409903,
+    "sharpe_ratio": 2.2890358906403465,
+    "max_ddpercent": -14.686931405418724,
+    "return_drawdown_ratio": 3.2972607485580405,
+    "total_return": 85.0929124980786
+  },
+  {
+    "stop_loss": 0.12,
+    "take_profit": 0.15,
+    "annual_return": 86.58746503058116,
+    "sharpe_ratio": 2.273799800215829,
+    "max_ddpercent": -14.693114112639593,
+    "return_drawdown_ratio": 3.3394793488745913,
+    "total_return": 83.81666614960255
+  },
+  {
+    "stop_loss": 0.03,
+    "take_profit": 0.05,
+    "annual_return": 84.72345353788876,
+    "sharpe_ratio": 2.261005174248187,
+    "max_ddpercent": -13.304167559899849,
+    "return_drawdown_ratio": 3.920597139303698,
+    "total_return": 82.01230302467633
+  }
+]
