@@ -1,67 +1,241 @@
 {
   "params": {
     "stop_loss": 0.07,
-    "take_profit": 0.2,
     "portfolio_dd": 0.1,
-    "cooldown_days": 5
+    "cooldown_days": 5,
+    "trail_activate_grid": [
+      0.1,
+      0.15,
+      0.2,
+      0.25
+    ],
+    "trail_pullback_grid": [
+      0.05,
+      0.08,
+      0.12
+    ]
   },
-  "baseline": {
-    "start_date": "2025-06-30",
-    "end_date": "2026-06-29",
-    "total_days": "242",
-    "profit_days": "141",
-    "loss_days": "100",
-    "capital": "1000000",
-    "end_balance": 2003010.4153015092,
-    "max_drawdown": -215202.00315268082,
-    "max_ddpercent": -12.540231336577834,
-    "max_drawdown_duration": "59",
-    "total_net_pnl": 1003010.4153015094,
-    "daily_net_pnl": 4144.671137609543,
-    "total_commission": 241461.20373301135,
-    "daily_commission": 997.773569144675,
-    "total_turnover": 322619494.77799207,
-    "daily_turnover": 1333138.408173521,
-    "total_trade_count": "2540",
-    "daily_trade_count": 10.49586776859504,
-    "total_return": 100.30104153015094,
-    "annual_return": 103.61677844023858,
-    "daily_return": 0.3049186081192894,
-    "return_std": 1.8714376727207116,
-    "sharpe_ratio": 2.576194004963706,
-    "return_drawdown_ratio": 4.660785683253594
-  },
-  "circuit_breaker": {
-    "start_date": "2025-06-30",
-    "end_date": "2026-06-29",
-    "total_days": "242",
-    "profit_days": "136",
-    "loss_days": "95",
-    "capital": "1000000",
-    "end_balance": 1870152.3188525056,
-    "max_drawdown": -217030.19158870634,
-    "max_ddpercent": -13.483874446175658,
-    "max_drawdown_duration": "70",
-    "total_net_pnl": 870152.3188525058,
-    "daily_net_pnl": 3595.6707390599413,
-    "total_commission": 225417.22618362482,
-    "daily_commission": 931.476141254648,
-    "total_turnover": 301227220.92147565,
-    "daily_turnover": 1244740.5823201472,
-    "total_trade_count": "2438",
-    "daily_trade_count": 10.074380165289256,
-    "total_return": 87.01523188525056,
-    "annual_return": 89.8917684764985,
-    "daily_return": 0.2759420226871095,
-    "return_std": 1.8420501597138916,
-    "sharpe_ratio": 2.3685709350625284,
-    "return_drawdown_ratio": 4.009360690707634
-  },
-  "circuit_events": {
-    "count": 2,
-    "dates": [
-      "2025-11-21",
-      "2026-03-19"
+  "grid": [
+    {
+      "A": 0.15,
+      "B": 0.08,
+      "annual_return": 37.66465030426142,
+      "total_return": 36.459381494525054,
+      "sharpe_ratio": 1.4707388814645157,
+      "max_ddpercent": -16.59253764350954,
+      "return_drawdown_ratio": 1.3430679790930233,
+      "end_balance": 1364593.8149452505,
+      "total_trade_count": "16816",
+      "circuit_count": 3,
+      "circuit_dates": [
+        "2026-03-23",
+        "2026-06-08",
+        "2026-06-29"
+      ]
+    },
+    {
+      "A": 0.25,
+      "B": 0.05,
+      "annual_return": 37.5223925355929,
+      "total_return": 36.321675974453925,
+      "sharpe_ratio": 1.466401681383498,
+      "max_ddpercent": -16.593064841816396,
+      "return_drawdown_ratio": 1.3392958271985533,
+      "end_balance": 1363216.7597445392,
+      "total_trade_count": "16841",
+      "circuit_count": 3,
+      "circuit_dates": [
+        "2026-03-23",
+        "2026-06-08",
+        "2026-06-29"
+      ]
+    },
+    {
+      "A": 0.25,
+      "B": 0.12,
+      "annual_return": 37.33885207558553,
+      "total_return": 36.14400880916679,
+      "sharpe_ratio": 1.4613890740640856,
+      "max_ddpercent": -16.59122695943236,
+      "return_drawdown_ratio": 1.3346611328551503,
+      "end_balance": 1361440.088091668,
+      "total_trade_count": "16844",
+      "circuit_count": 3,
+      "circuit_dates": [
+        "2026-03-23",
+        "2026-06-08",
+        "2026-06-29"
+      ]
+    },
+    {
+      "A": 0.2,
+      "B": 0.08,
+      "annual_return": 37.32997209187329,
+      "total_return": 36.135412984933346,
+      "sharpe_ratio": 1.460802800334224,
+      "max_ddpercent": -16.59142473515812,
+      "return_drawdown_ratio": 1.3344089034663635,
+      "end_balance": 1361354.1298493335,
+      "total_trade_count": "16831",
+      "circuit_count": 3,
+      "circuit_dates": [
+        "2026-03-23",
+        "2026-06-08",
+        "2026-06-29"
+      ]
+    },
+    {
+      "A": 0.15,
+      "B": 0.05,
+      "annual_return": 37.27519226155339,
+      "total_return": 36.08238610918369,
+      "sharpe_ratio": 1.4598010140215896,
+      "max_ddpercent": -16.59340449529506,
+      "return_drawdown_ratio": 1.332779267207545,
+      "end_balance": 1360823.8610918368,
+      "total_trade_count": "16809",
+      "circuit_count": 3,
+      "circuit_dates": [
+        "2026-03-23",
+        "2026-06-08",
+        "2026-06-29"
+      ]
+    },
+    {
+      "A": 0.2,
+      "B": 0.05,
+      "annual_return": 37.21834274645782,
+      "total_return": 36.02735577857117,
+      "sharpe_ratio": 1.4588711480344825,
+      "max_ddpercent": -16.591611060108534,
+      "return_drawdown_ratio": 1.3314574948470743,
+      "end_balance": 1360273.5577857117,
+      "total_trade_count": "16834",
+      "circuit_count": 3,
+      "circuit_dates": [
+        "2026-03-23",
+        "2026-06-08",
+        "2026-06-29"
+      ]
+    },
+    {
+      "A": 0.25,
+      "B": 0.08,
+      "annual_return": 37.23255611219219,
+      "total_return": 36.04111431660204,
+      "sharpe_ratio": 1.4571829774233551,
+      "max_ddpercent": -16.591681545742333,
+      "return_drawdown_ratio": 1.3318244750310917,
+      "end_balance": 1360411.1431660205,
+      "total_trade_count": "16854",
+      "circuit_count": 3,
+      "circuit_dates": [
+        "2026-03-23",
+        "2026-06-08",
+        "2026-06-29"
+      ]
+    },
+    {
+      "A": 0.15,
+      "B": 0.12,
+      "annual_return": 36.84141035526278,
+      "total_return": 35.66248522389437,
+      "sharpe_ratio": 1.4463222506506748,
+      "max_ddpercent": -16.59538559339263,
+      "return_drawdown_ratio": 1.3211574168929174,
+      "end_balance": 1356624.8522389438,
+      "total_trade_count": "16818",
+      "circuit_count": 3,
+      "circuit_dates": [
+        "2026-03-23",
+        "2026-06-08",
+        "2026-06-29"
+      ]
+    },
+    {
+      "A": 0.2,
+      "B": 0.12,
+      "annual_return": 36.68347299367909,
+      "total_return": 35.509601857881364,
+      "sharpe_ratio": 1.4412245026629042,
+      "max_ddpercent": -16.59536291252386,
+      "return_drawdown_ratio": 1.3169799902568498,
+      "end_balance": 1355096.0185788136,
+      "total_trade_count": "16849",
+      "circuit_count": 3,
+      "circuit_dates": [
+        "2026-03-23",
+        "2026-06-08",
+        "2026-06-29"
+      ]
+    },
+    {
+      "A": 0.1,
+      "B": 0.08,
+      "annual_return": 36.192014355592676,
+      "total_return": 35.03386989621371,
+      "sharpe_ratio": 1.4241285622322468,
+      "max_ddpercent": -16.929231527692234,
+      "return_drawdown_ratio": 1.2730820130755238,
+      "end_balance": 1350338.698962137,
+      "total_trade_count": "16802",
+      "circuit_count": 3,
+      "circuit_dates": [
+        "2026-03-23",
+        "2026-06-08",
+        "2026-06-29"
+      ]
+    },
+    {
+      "A": 0.1,
+      "B": 0.12,
+      "annual_return": 36.00412646852495,
+      "total_return": 34.851994421532154,
+      "sharpe_ratio": 1.4214986586363874,
+      "max_ddpercent": -16.600759463757864,
+      "return_drawdown_ratio": 1.2983877244457545,
+      "end_balance": 1348519.9442153214,
+      "total_trade_count": "16818",
+      "circuit_count": 3,
+      "circuit_dates": [
+        "2026-03-23",
+        "2026-06-08",
+        "2026-06-29"
+      ]
+    },
+    {
+      "A": 0.1,
+      "B": 0.05,
+      "annual_return": 34.33568709586194,
+      "total_return": 33.23694510879436,
+      "sharpe_ratio": 1.369389888863553,
+      "max_ddpercent": -16.891780838124028,
+      "return_drawdown_ratio": 1.2273402351255156,
+      "end_balance": 1332369.4510879435,
+      "total_trade_count": "16814",
+      "circuit_count": 3,
+      "circuit_dates": [
+        "2026-03-23",
+        "2026-06-08",
+        "2026-06-29"
+      ]
+    }
+  ],
+  "best_by_sharpe": {
+    "A": 0.15,
+    "B": 0.08,
+    "annual_return": 37.66465030426142,
+    "total_return": 36.459381494525054,
+    "sharpe_ratio": 1.4707388814645157,
+    "max_ddpercent": -16.59253764350954,
+    "return_drawdown_ratio": 1.3430679790930233,
+    "end_balance": 1364593.8149452505,
+    "total_trade_count": "16816",
+    "circuit_count": 3,
+    "circuit_dates": [
+      "2026-03-23",
+      "2026-06-08",
+      "2026-06-29"
     ]
   }
 }

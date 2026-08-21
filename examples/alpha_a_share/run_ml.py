@@ -5,11 +5,11 @@ ML 因子学习回测系统
 用模型预测值作为选股信号，验证 ML 因子合成的效果。
 
 流程：
-  1. 加载日线数据 → 构建 Alpha158 因子数据集（含标签: 未来3日收益）
+  1. 加载日线数据 → 构建 Alpha158 因子数据集
   2. 按时间轴划分训练/回测期（历史训练 → 近一年回测）
-  3. LightGBM 在训练期学习因子 → 预测值
-  4. 在回测期用模型预测值做多前 1/3 股票
-  5. 输出统计指标 vs 等权多因子
+  3. 分别训练 1日 / 3日 / 5日持有期 LightGBM 模型
+  4. 用主持有期(3日)预测值做多前 1/3 股票并回测
+  5. 输出统计指标
 
 用法：
   cd /Users/chendi/project/vnpy
@@ -18,11 +18,10 @@ ML 因子学习回测系统
 
 import os
 import sys
+import json
 from datetime import datetime, timedelta
 
-import numpy as np
 import polars as pl
-import lightgbm as lgb
 
 PROJECT_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 EXAMPLE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -30,19 +29,27 @@ sys.path.insert(0, PROJECT_DIR)
 sys.path.insert(0, EXAMPLE_DIR)
 
 from vnpy.alpha import (
-    AlphaLab, AlphaDataset, AlphaModel, AlphaStrategy,
-    BacktestingEngine, logger,
+    AlphaLab, AlphaStrategy,
+    BacktestingEngine,
 )
 from vnpy.alpha.dataset import Segment
 from vnpy.alpha.dataset.datasets.alpha_158 import Alpha158
-from vnpy.trader.constant import Interval, Exchange
+from vnpy.alpha.dataset.template import calculate_feature
+from vnpy.trader.constant import Interval
 from vnpy.trader.object import BarData
-from vnpy.trader.setting import SETTINGS
 
 from datafeed import download_daily_data, data_end_date
-
-MODEL_SAVE_NAME = "lgb_alpha_158"
-FORECAST_DAYS = 3           # 模型预测的是未来N日收益
+from stock_universe import STOCK_LIST
+from horizons import (
+    FORECAST_HORIZONS,
+    PRIMARY_HORIZON,
+    horizon_label,
+    model_name,
+    feature_cols_name,
+    LEGACY_MODEL_NAME,
+    LEGACY_FEATURE_COLS,
+)
+from vnpy.alpha.model.lgb_model import LGBAlphaModel
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -51,45 +58,27 @@ FORECAST_DAYS = 3           # 模型预测的是未来N日收益
 
 ALPHA_LAB_PATH = os.path.join(PROJECT_DIR, "alpha_data")
 
-STOCK_LIST: list[tuple[str, str, str]] = [
-    ("002245", "SZSE", "蔚蓝锂芯"),
-    ("600487", "SSE", "亨通光电"),
-    ("600089", "SSE", "特变电工"),
-    ("002532", "SZSE", "天山铝业"),
-    ("300316", "SZSE", "晶盛机电"),
-    ("300843", "SZSE", "胜蓝股份"),
-    ("300438", "SZSE", "鹏辉能源"),
-    ("000338", "SZSE", "潍柴动力"),
-    ("300661", "SZSE", "圣邦股份"),
-    ("300507", "SZSE", "苏奥传感"),
-    ("301511", "SZSE", "德福科技"),
-    ("300442", "SZSE", "润泽科技"),
-    ("301498", "SZSE", "乖宝宠物"),
-    ("002299", "SZSE", "圣农发展"),
-    ("601717", "SSE", "中创智领"),
-    ("002639", "SZSE", "雪人集团"),
-    ("601665", "SSE", "齐鲁银行"),
-    ("600580", "SSE", "卧龙电驱"),
-    ("301217", "SZSE", "铜冠铜箔"),
-    ("300484", "SZSE", "蓝海华腾"),
-    ("518800", "SSE", "黄金ETF国泰"),
-    ("688523", "SSE", "航天环宇"),
-    ("300433", "SZSE", "蓝思科技"),
-    ("300811", "SZSE", "铂科新材"),
-    ("300136", "SZSE", "信维通信"),
-]
-
-# 训练/回测期划分（默认：2023 起训练，近一年回测；由 resolve_periods 按最新数据校准）
 TRAIN_START = "2023-01-01"
 BACKTEST_DAYS = 365
-
 LOOKBACK_DAYS = 90
 
 INITIAL_CAPITAL = 1_000_000
 LONG_TOP_N_RATIO = 1.0 / 3.0
-
-COMMISSION_RATE_BUY  = 0.00025
+COMMISSION_RATE_BUY = 0.00025
 COMMISSION_RATE_SELL = 0.00125
+
+
+def setup_contracts(lab: AlphaLab) -> None:
+    """为股票池写入回测所需的价格精度/费率"""
+    for code, exchange_str, _name in STOCK_LIST:
+        lab.add_contract_setting(
+            f"{code}.{exchange_str}",
+            long_rate=COMMISSION_RATE_BUY,
+            short_rate=COMMISSION_RATE_SELL,
+            size=1,
+            pricetick=0.01,
+        )
+    print(f"  ✓ 已配置 {len(STOCK_LIST)} 个合约信息")
 
 
 def resolve_periods(lab: AlphaLab, vt_symbols: list[str]) -> tuple[str, str, str, str]:
@@ -126,10 +115,6 @@ def resolve_periods(lab: AlphaLab, vt_symbols: list[str]) -> tuple[str, str, str
     )
 
 
-# ═══════════════════════════════════════════════════════════════
-# 2. 构建数据集 DataFrame
-# ═══════════════════════════════════════════════════════════════
-
 def build_dataset_df(
     lab: AlphaLab,
     vt_symbols: list[str],
@@ -138,7 +123,7 @@ def build_dataset_df(
 ) -> pl.DataFrame:
     """构建归一化的因子数据集 DataFrame"""
     start_dt = datetime.strptime(lookback_start, "%Y-%m-%d")
-    end_dt   = datetime.strptime(data_end, "%Y-%m-%d")
+    end_dt = datetime.strptime(data_end, "%Y-%m-%d")
 
     records: list[dict] = []
     for vt_symbol in vt_symbols:
@@ -160,7 +145,6 @@ def build_dataset_df(
 
     df = pl.DataFrame(records).sort(["datetime", "vt_symbol"])
 
-    # 统一价格归一化
     first_close = df.group_by("vt_symbol").agg(pl.col("close").first().alias("close_0"))
     df = df.join(first_close, on="vt_symbol")
 
@@ -172,7 +156,6 @@ def build_dataset_df(
     )
     df = df.drop("close_0")
 
-    # 停牌日置 NaN
     numeric_cols = [c for c in df.columns if c not in ("datetime", "vt_symbol")]
     mask = df.select(pl.sum_horizontal(pl.col(c) for c in numeric_cols)) == 0
     df = df.with_columns(
@@ -183,15 +166,18 @@ def build_dataset_df(
     return df
 
 
-# ═══════════════════════════════════════════════════════════════
-# 3. ML 模型（LightGBM）
-# ═══════════════════════════════════════════════════════════════
+def rebind_label(dataset: Alpha158, days: int) -> None:
+    """复用已算好的因子，仅替换持有期标签"""
+    dataset.set_label(horizon_label(days))
+    label_series = calculate_feature((dataset.df, "label", dataset.label_expression))
+    dataset.result_df = dataset.result_df.with_columns(label_series)
 
-from vnpy.alpha.model.lgb_model import LGBAlphaModel
+    raw_df = dataset.result_df.fill_null(float("nan"))
+    select_columns: list[str] = ["datetime", "vt_symbol"] + raw_df.columns[dataset.df.width:]
+    dataset.raw_df = raw_df.select(select_columns).sort(["datetime", "vt_symbol"])
+    dataset.infer_df = dataset.raw_df
+    dataset.learn_df = dataset.raw_df
 
-# ═══════════════════════════════════════════════════════════════
-# 4. 策略（复用信号）
-# ═══════════════════════════════════════════════════════════════
 
 class MLSignalStrategy(AlphaStrategy):
     """ML 信号选股：做多预测信号前 1/3 股票"""
@@ -226,13 +212,51 @@ class MLSignalStrategy(AlphaStrategy):
         pass
 
 
-# ═══════════════════════════════════════════════════════════════
-# 5. 主流程
-# ═══════════════════════════════════════════════════════════════
+def train_horizon_models(
+    lab: AlphaLab,
+    dataset: Alpha158,
+) -> dict[int, LGBAlphaModel]:
+    """训练各持有期模型并保存；因子只算一次，标签按持有期替换"""
+    models: dict[int, LGBAlphaModel] = {}
+
+    for i, days in enumerate(FORECAST_HORIZONS):
+        print(f"\n  ── 训练 {days} 日持有期模型 ({i + 1}/{len(FORECAST_HORIZONS)}) ──")
+        rebind_label(dataset, days)
+
+        model = LGBAlphaModel()
+        model.fit(dataset)
+        models[days] = model
+
+        name = model_name(days)
+        lab.save_model(name, model)
+        feat_path = lab.model_path.parent.joinpath(feature_cols_name(days))
+        with open(feat_path, "w") as f:
+            json.dump(model.feature_cols, f)
+        print(f"    ✓ 已保存: {name}  (特征 {len(model.feature_cols)} 列)")
+
+        if days == PRIMARY_HORIZON:
+            lab.save_model(LEGACY_MODEL_NAME, model)
+            legacy_feat = lab.model_path.parent.joinpath(LEGACY_FEATURE_COLS)
+            with open(legacy_feat, "w") as f:
+                json.dump(model.feature_cols, f)
+            print(f"    ✓ 兼容旧名: {LEGACY_MODEL_NAME}")
+
+            if model.model:
+                importance = sorted(
+                    zip(model.feature_cols, model.model.feature_importances_),
+                    key=lambda x: x[1], reverse=True,
+                )
+                print("    因子重要性 Top10:")
+                for fname, imp in importance[:10]:
+                    print(f"      {fname:15s}: {imp}")
+
+    return models
+
 
 def main() -> None:
     print("=" * 60)
-    print("  ML 因子学习回测系统 (LightGBM + Alpha158)")
+    print("  ML 因子学习回测系统 (LightGBM + Alpha158 多持有期)")
+    print(f"  持有期: {FORECAST_HORIZONS} 日  |  主排序/回测: {PRIMARY_HORIZON} 日")
     print("=" * 60)
 
     lab = AlphaLab(ALPHA_LAB_PATH)
@@ -243,10 +267,7 @@ def main() -> None:
 
     train_start, train_end, test_start, test_end = resolve_periods(lab, vt_symbols)
 
-    # ── Step 1: 数据构建 ─────────────────────────────────────
     print("\n[1/5] 构建因子数据集...")
-
-    # 数据需要从训练期前 lookback 天开始，供因子计算用
     data_start_dt = datetime.strptime(TRAIN_START, "%Y-%m-%d") - timedelta(days=LOOKBACK_DAYS)
     data_start = data_start_dt.strftime("%Y-%m-%d")
 
@@ -254,7 +275,6 @@ def main() -> None:
     print(f"  数据范围: {df['datetime'].min()} ~ {df['datetime'].max()}")
     print(f"  行数: {len(df)}, 股票数: {df['vt_symbol'].n_unique()}")
 
-    # ── Step 2: Alpha158 因子 ───────────────────────────────
     print("\n[2/5] 创建 Alpha158 因子数据集（训练/回测分窗）...")
     dataset = Alpha158(
         df=df,
@@ -262,30 +282,28 @@ def main() -> None:
         valid_period=(test_start, test_end),
         test_period=(test_start, test_end),
     )
+    dataset.set_label(horizon_label(PRIMARY_HORIZON))
     print(f"  训练期: {train_start} ~ {train_end}")
     print(f"  回测期: {test_start} ~ {test_end}")
 
-    # ── Step 3: 并行计算因子 ────────────────────────────────
-    print("\n[3/5] 计算 158 个因子 + 标签...")
+    print("\n[3/5] 计算 158 个因子 + 主持有期标签...")
     dataset.prepare_data(max_workers=4)
     print(f"  因子列数: {len(dataset.feature_expressions)}")
 
-    # ── Step 4: 训练 ML 模型 ────────────────────────────────
-    print("\n[4/5] 训练 LightGBM 模型...")
-    model = LGBAlphaModel()
-    model.fit(dataset)
+    print("\n[4/5] 训练多持有期 LightGBM 模型...")
+    models = train_horizon_models(lab, dataset)
+    primary_model = models[PRIMARY_HORIZON]
 
-    # 生成回测期预测信号
-    preds = model.predict(dataset, Segment.TEST)
+    rebind_label(dataset, PRIMARY_HORIZON)
+    preds = primary_model.predict(dataset, Segment.TEST)
     test_raw = dataset.fetch_raw(Segment.TEST)
-
     signal_df = test_raw.select(["datetime", "vt_symbol"]).with_columns(
         pl.Series("signal", preds)
     )
-    print(f"  信号记录数: {len(signal_df)}")
+    print(f"  主持有期信号记录数: {len(signal_df)}")
 
-    # ── Step 5: 回测 ────────────────────────────────────────
-    print("\n[5/5] 运行回测...")
+    print(f"\n[5/5] 运行回测 (持有期={PRIMARY_HORIZON}日)...")
+    setup_contracts(lab)
     engine = BacktestingEngine(lab)
     engine.set_parameters(
         vt_symbols=vt_symbols,
@@ -300,11 +318,15 @@ def main() -> None:
     engine.load_data()
     engine.run_backtesting()
     engine.calculate_result()
-    statistics = engine.calculate_statistics()
+    try:
+        statistics = engine.calculate_statistics()
+    except AttributeError as exc:
+        print(f"  ⚠ 回测统计失败（模型已保存，可继续预测）: {exc}")
+        print("\n✓ 多持有期模型训练完成!")
+        return
 
-    # ── 输出 ─────────────────────────────────────────────────
     print("\n" + "=" * 60)
-    print("  ML 因子学习回测结果")
+    print(f"  ML 回测结果 (持有期={PRIMARY_HORIZON}日信号)")
     print("=" * 60)
     for k, v in statistics.items():
         if isinstance(v, float):
@@ -313,31 +335,13 @@ def main() -> None:
             print(f"  {k:30s}: {v}")
     print("-" * 60)
     print(f"  交易笔数:  {engine.trade_count:>14d}")
-    print(f"  训练样本:  {len(X_train) if 'X_train' in dir() else 'N/A':>14}")
-    print(f"  因子数量:  {len(model.feature_cols):>14d}")
+    print(f"  因子数量:  {len(primary_model.feature_cols):>14d}")
+    print(f"  已保存模型: {', '.join(model_name(d) for d in FORECAST_HORIZONS)}")
 
-    # ── 因子重要性 ──────────────────────────────────────────
-    if model.model:
-        importance = sorted(
-            zip(model.feature_cols, model.model.feature_importances_),
-            key=lambda x: x[1], reverse=True,
-        )
-        print(f"\n  因子重要性 Top10:")
-        for name, imp in importance[:10]:
-            print(f"    {name:15s}: {imp}")
-
-
-    # 保存模型
-    lab.save_model(MODEL_SAVE_NAME, model)
-    import json
-    feat_path = lab.model_path.parent.joinpath("feature_cols.json")
-    with open(feat_path, "w") as f:
-        json.dump(model.feature_cols, f)
-    print(f"\n  模型已保存: {MODEL_SAVE_NAME}")
-    print(f"  特征列已保存: {feat_path}")
     print("\n提示:")
     print("  engine.show_chart()                     # 资金曲线")
     print("  engine.show_performance('000300.SSE')   # vs 沪深300")
+    print("  predict_daily.py 将同时输出 1/3/5 日预期收益")
     print("\n✓ 回测完成!")
 
 

@@ -1,0 +1,121 @@
+{
+  "period": {
+    "train": [
+      "2023-01-01",
+      "2025-06-28"
+    ],
+    "backtest": [
+      "2025-06-29",
+      "2026-06-29"
+    ]
+  },
+  "params": {
+    "breakout_window": 20,
+    "pyramid": [
+      0.4,
+      0.3,
+      0.2,
+      0.1
+    ],
+    "stop_loss": 0.07,
+    "trail_activate": 0.15,
+    "trail_pullback": 0.08,
+    "add_spacing_grid": [
+      0.05,
+      0.08,
+      0.1
+    ]
+  },
+  "baseline_A_equal_weight": {
+    "annual_return": 46.18670324345671,
+    "total_return": 44.70872873966609,
+    "sharpe_ratio": 1.6592876249291812,
+    "max_ddpercent": -14.92839066218089,
+    "return_drawdown_ratio": 1.7606346711211764,
+    "end_balance": 1447087.287396661,
+    "total_trade_count": "17665"
+  },
+  "baseline_B_trail": {
+    "annual_return": 49.19695336134129,
+    "total_return": 47.62265085377837,
+    "sharpe_ratio": 1.7422814305625967,
+    "max_ddpercent": -14.122373862818183,
+    "return_drawdown_ratio": 1.9617013596214008,
+    "end_balance": 1476226.5085377838,
+    "total_trade_count": "17616"
+  },
+  "livermore_grid": [
+    {
+      "X": 0.1,
+      "annual_return": 28.26285870390605,
+      "total_return": 27.358447225381056,
+      "sharpe_ratio": 2.4301018556301734,
+      "max_ddpercent": -4.541038819945609,
+      "return_drawdown_ratio": 4.83676022171776,
+      "end_balance": 1273584.4722538106,
+      "total_trade_count": "10118",
+      "entry_count": 619,
+      "add_count": 4897,
+      "half_count": 285,
+      "stop_count": 340,
+      "trail_clear_count": 307,
+      "delta_annual_vs_B": -20.934094657435242,
+      "delta_sharpe_vs_B": 0.6878204250675768,
+      "delta_dd_vs_B": 9.581335042872574
+    },
+    {
+      "X": 0.08,
+      "annual_return": 29.73348654121009,
+      "total_return": 28.782014971891368,
+      "sharpe_ratio": 2.3983391888828187,
+      "max_ddpercent": -4.669933345145116,
+      "return_drawdown_ratio": 4.870233235966178,
+      "end_balance": 1287820.1497189137,
+      "total_trade_count": "10156",
+      "entry_count": 619,
+      "add_count": 5015,
+      "half_count": 282,
+      "stop_count": 342,
+      "trail_clear_count": 306,
+      "delta_annual_vs_B": -19.463466820131202,
+      "delta_sharpe_vs_B": 0.6560577583202221,
+      "delta_dd_vs_B": 9.452440517673066
+    },
+    {
+      "X": 0.05,
+      "annual_return": 35.647875403756416,
+      "total_return": 34.507143390836205,
+      "sharpe_ratio": 2.382246127512709,
+      "max_ddpercent": -6.005896738206474,
+      "return_drawdown_ratio": 4.395877713749839,
+      "end_balance": 1345071.433908362,
+      "total_trade_count": "10221",
+      "entry_count": 620,
+      "add_count": 5283,
+      "half_count": 272,
+      "stop_count": 351,
+      "trail_clear_count": 295,
+      "delta_annual_vs_B": -13.549077957584878,
+      "delta_sharpe_vs_B": 0.6399646969501125,
+      "delta_dd_vs_B": 8.11647712461171
+    }
+  ],
+  "best_by_sharpe": {
+    "X": 0.1,
+    "annual_return": 28.26285870390605,
+    "total_return": 27.358447225381056,
+    "sharpe_ratio": 2.4301018556301734,
+    "max_ddpercent": -4.541038819945609,
+    "return_drawdown_ratio": 4.83676022171776,
+    "end_balance": 1273584.4722538106,
+    "total_trade_count": "10118",
+    "entry_count": 619,
+    "add_count": 4897,
+    "half_count": 285,
+    "stop_count": 340,
+    "trail_clear_count": 307,
+    "delta_annual_vs_B": -20.934094657435242,
+    "delta_sharpe_vs_B": 0.6878204250675768,
+    "delta_dd_vs_B": 9.581335042872574
+  }
+}

@@ -238,5 +238,887 @@
         "short_rate": 0.00125,
         "size": 1,
         "pricetick": 0.01
+    },
+    "688679.SSE": {
+        "long_rate": 0.00025,
+        "short_rate": 0.00125,
+        "size": 1,
+        "pricetick": 0.01
+    },
+    "600206.SSE": {
+        "long_rate": 0.00025,
+        "short_rate": 0.00125,
+        "size": 1,
+        "pricetick": 0.01
+    },
+    "000811.SZSE": {
+        "long_rate": 0.00025,
+        "short_rate": 0.00125,
+        "size": 1,
+        "pricetick": 0.01
+    },
+    "002028.SZSE": {
+        "long_rate": 0.00025,
+        "short_rate": 0.00125,
+        "size": 1,
+        "pricetick": 0.01
+    },
+    "688825.SSE": {
+        "long_rate": 0.00025,
+        "short_rate": 0.00125,
+        "size": 1,
+        "pricetick": 0.01
+    },
+    "002682.SZSE": {
+        "long_rate": 0.00025,
+        "short_rate": 0.00125,
+        "size": 1,
+        "pricetick": 0.01
+    },
+    "300936.SZSE": {
+        "long_rate": 0.00025,
+        "short_rate": 0.00125,
+        "size": 1,
+        "pricetick": 0.01
+    },
+    "300153.SZSE": {
+        "long_rate": 0.00025,
+        "short_rate": 0.00125,
+        "size": 1,
+        "pricetick": 0.01
+    },
+    "601609.SSE": {
+        "long_rate": 0.00025,
+        "short_rate": 0.00125,
+        "size": 1,
+        "pricetick": 0.01
+    },
+    "300475.SZSE": {
+        "long_rate": 0.00025,
+        "short_rate": 0.00125,
+        "size": 1,
+        "pricetick": 0.01
+    },
+    "301306.SZSE": {
+        "long_rate": 0.00025,
+        "short_rate": 0.00125,
+        "size": 1,
+        "pricetick": 0.01
+    },
+    "300260.SZSE": {
+        "long_rate": 0.00025,
+        "short_rate": 0.00125,
+        "size": 1,
+        "pricetick": 0.01
+    },
+    "300980.SZSE": {
+        "long_rate": 0.00025,
+        "short_rate": 0.00125,
+        "size": 1,
+        "pricetick": 0.01
+    },
+    "301069.SZSE": {
+        "long_rate": 0.00025,
+        "short_rate": 0.00125,
+        "size": 1,
+        "pricetick": 0.01
+    },
+    "603986.SSE": {
+        "long_rate": 0.00025,
+        "short_rate": 0.00125,
+        "size": 1,
+        "pricetick": 0.01
+    },
+    "300935.SZSE": {
+        "long_rate": 0.00025,
+        "short_rate": 0.00125,
+        "size": 1,
+        "pricetick": 0.01
+    },
+    "301092.SZSE": {
+        "long_rate": 0.00025,
+        "short_rate": 0.00125,
+        "size": 1,
+        "pricetick": 0.01
+    },
+    "301183.SZSE": {
+        "long_rate": 0.00025,
+        "short_rate": 0.00125,
+        "size": 1,
+        "pricetick": 0.01
+    },
+    "300786.SZSE": {
+        "long_rate": 0.00025,
+        "short_rate": 0.00125,
+        "size": 1,
+        "pricetick": 0.01
+    },
+    "002273.SZSE": {
+        "long_rate": 0.00025,
+        "short_rate": 0.00125,
+        "size": 1,
+        "pricetick": 0.01
+    },
+    "000533.SZSE": {
+        "long_rate": 0.00025,
+        "short_rate": 0.00125,
+        "size": 1,
+        "pricetick": 0.01
+    },
+    "300984.SZSE": {
+        "long_rate": 0.00025,
+        "short_rate": 0.00125,
+        "size": 1,
+        "pricetick": 0.01
+    },
+    "600110.SSE": {
+        "long_rate": 0.00025,
+        "short_rate": 0.00125,
+        "size": 1,
+        "pricetick": 0.01
+    },
+    "600352.SSE": {
+        "long_rate": 0.00025,
+        "short_rate": 0.00125,
+        "size": 1,
+        "pricetick": 0.01
+    },
+    "600460.SSE": {
+        "long_rate": 0.00025,
+        "short_rate": 0.00125,
+        "size": 1,
+        "pricetick": 0.01
+    },
+    "605589.SSE": {
+        "long_rate": 0.00025,
+        "short_rate": 0.00125,
+        "size": 1,
+        "pricetick": 0.01
+    },
+    "000833.SZSE": {
+        "long_rate": 0.00025,
+        "short_rate": 0.00125,
+        "size": 1,
+        "pricetick": 0.01
+    },
+    "301005.SZSE": {
+        "long_rate": 0.00025,
+        "short_rate": 0.00125,
+        "size": 1,
+        "pricetick": 0.01
+    },
+    "300802.SZSE": {
+        "long_rate": 0.00025,
+        "short_rate": 0.00125,
+        "size": 1,
+        "pricetick": 0.01
+    },
+    "002249.SZSE": {
+        "long_rate": 0.00025,
+        "short_rate": 0.00125,
+        "size": 1,
+        "pricetick": 0.01
+    },
+    "605358.SSE": {
+        "long_rate": 0.00025,
+        "short_rate": 0.00125,
+        "size": 1,
+        "pricetick": 0.01
+    },
+    "300739.SZSE": {
+        "long_rate": 0.00025,
+        "short_rate": 0.00125,
+        "size": 1,
+        "pricetick": 0.01
+    },
+    "600391.SSE": {
+        "long_rate": 0.00025,
+        "short_rate": 0.00125,
+        "size": 1,
+        "pricetick": 0.01
+    },
+    "603298.SSE": {
+        "long_rate": 0.00025,
+        "short_rate": 0.00125,
+        "size": 1,
+        "pricetick": 0.01
+    },
+    "301057.SZSE": {
+        "long_rate": 0.00025,
+        "short_rate": 0.00125,
+        "size": 1,
+        "pricetick": 0.01
+    },
+    "300740.SZSE": {
+        "long_rate": 0.00025,
+        "short_rate": 0.00125,
+        "size": 1,
+        "pricetick": 0.01
+    },
+    "601138.SSE": {
+        "long_rate": 0.00025,
+        "short_rate": 0.00125,
+        "size": 1,
+        "pricetick": 0.01
+    },
+    "688017.SSE": {
+        "long_rate": 0.00025,
+        "short_rate": 0.00125,
+        "size": 1,
+        "pricetick": 0.01
+    },
+    "688270.SSE": {
+        "long_rate": 0.00025,
+        "short_rate": 0.00125,
+        "size": 1,
+        "pricetick": 0.01
+    },
+    "300632.SZSE": {
+        "long_rate": 0.00025,
+        "short_rate": 0.00125,
+        "size": 1,
+        "pricetick": 0.01
+    },
+    "301308.SZSE": {
+        "long_rate": 0.00025,
+        "short_rate": 0.00125,
+        "size": 1,
+        "pricetick": 0.01
+    },
+    "002655.SZSE": {
+        "long_rate": 0.00025,
+        "short_rate": 0.00125,
+        "size": 1,
+        "pricetick": 0.01
+    },
+    "601179.SSE": {
+        "long_rate": 0.00025,
+        "short_rate": 0.00125,
+        "size": 1,
+        "pricetick": 0.01
+    },
+    "001283.SZSE": {
+        "long_rate": 0.00025,
+        "short_rate": 0.00125,
+        "size": 1,
+        "pricetick": 0.01
+    },
+    "603983.SSE": {
+        "long_rate": 0.00025,
+        "short_rate": 0.00125,
+        "size": 1,
+        "pricetick": 0.01
+    },
+    "300680.SZSE": {
+        "long_rate": 0.00025,
+        "short_rate": 0.00125,
+        "size": 1,
+        "pricetick": 0.01
+    },
+    "301487.SZSE": {
+        "long_rate": 0.00025,
+        "short_rate": 0.00125,
+        "size": 1,
+        "pricetick": 0.01
+    },
+    "301512.SZSE": {
+        "long_rate": 0.00025,
+        "short_rate": 0.00125,
+        "size": 1,
+        "pricetick": 0.01
+    },
+    "000683.SZSE": {
+        "long_rate": 0.00025,
+        "short_rate": 0.00125,
+        "size": 1,
+        "pricetick": 0.01
+    },
+    "688981.SSE": {
+        "long_rate": 0.00025,
+        "short_rate": 0.00125,
+        "size": 1,
+        "pricetick": 0.01
+    },
+    "301131.SZSE": {
+        "long_rate": 0.00025,
+        "short_rate": 0.00125,
+        "size": 1,
+        "pricetick": 0.01
+    },
+    "300100.SZSE": {
+        "long_rate": 0.00025,
+        "short_rate": 0.00125,
+        "size": 1,
+        "pricetick": 0.01
+    },
+    "002312.SZSE": {
+        "long_rate": 0.00025,
+        "short_rate": 0.00125,
+        "size": 1,
+        "pricetick": 0.01
+    },
+    "300863.SZSE": {
+        "long_rate": 0.00025,
+        "short_rate": 0.00125,
+        "size": 1,
+        "pricetick": 0.01
+    },
+    "300418.SZSE": {
+        "long_rate": 0.00025,
+        "short_rate": 0.00125,
+        "size": 1,
+        "pricetick": 0.01
+    },
+    "688435.SSE": {
+        "long_rate": 0.00025,
+        "short_rate": 0.00125,
+        "size": 1,
+        "pricetick": 0.01
+    },
+    "301298.SZSE": {
+        "long_rate": 0.00025,
+        "short_rate": 0.00125,
+        "size": 1,
+        "pricetick": 0.01
+    },
+    "688322.SSE": {
+        "long_rate": 0.00025,
+        "short_rate": 0.00125,
+        "size": 1,
+        "pricetick": 0.01
+    },
+    "300922.SZSE": {
+        "long_rate": 0.00025,
+        "short_rate": 0.00125,
+        "size": 1,
+        "pricetick": 0.01
+    },
+    "300118.SZSE": {
+        "long_rate": 0.00025,
+        "short_rate": 0.00125,
+        "size": 1,
+        "pricetick": 0.01
+    },
+    "001280.SZSE": {
+        "long_rate": 0.00025,
+        "short_rate": 0.00125,
+        "size": 1,
+        "pricetick": 0.01
+    },
+    "300775.SZSE": {
+        "long_rate": 0.00025,
+        "short_rate": 0.00125,
+        "size": 1,
+        "pricetick": 0.01
+    },
+    "300961.SZSE": {
+        "long_rate": 0.00025,
+        "short_rate": 0.00125,
+        "size": 1,
+        "pricetick": 0.01
+    },
+    "603667.SSE": {
+        "long_rate": 0.00025,
+        "short_rate": 0.00125,
+        "size": 1,
+        "pricetick": 0.01
+    },
+    "000679.SZSE": {
+        "long_rate": 0.00025,
+        "short_rate": 0.00125,
+        "size": 1,
+        "pricetick": 0.01
+    },
+    "600893.SSE": {
+        "long_rate": 0.00025,
+        "short_rate": 0.00125,
+        "size": 1,
+        "pricetick": 0.01
+    },
+    "000408.SZSE": {
+        "long_rate": 0.00025,
+        "short_rate": 0.00125,
+        "size": 1,
+        "pricetick": 0.01
+    },
+    "002664.SZSE": {
+        "long_rate": 0.00025,
+        "short_rate": 0.00125,
+        "size": 1,
+        "pricetick": 0.01
+    },
+    "002472.SZSE": {
+        "long_rate": 0.00025,
+        "short_rate": 0.00125,
+        "size": 1,
+        "pricetick": 0.01
+    },
+    "301586.SZSE": {
+        "long_rate": 0.00025,
+        "short_rate": 0.00125,
+        "size": 1,
+        "pricetick": 0.01
+    },
+    "300201.SZSE": {
+        "long_rate": 0.00025,
+        "short_rate": 0.00125,
+        "size": 1,
+        "pricetick": 0.01
+    },
+    "300274.SZSE": {
+        "long_rate": 0.00025,
+        "short_rate": 0.00125,
+        "size": 1,
+        "pricetick": 0.01
+    },
+    "002681.SZSE": {
+        "long_rate": 0.00025,
+        "short_rate": 0.00125,
+        "size": 1,
+        "pricetick": 0.01
+    },
+    "301012.SZSE": {
+        "long_rate": 0.00025,
+        "short_rate": 0.00125,
+        "size": 1,
+        "pricetick": 0.01
+    },
+    "601689.SSE": {
+        "long_rate": 0.00025,
+        "short_rate": 0.00125,
+        "size": 1,
+        "pricetick": 0.01
+    },
+    "002050.SZSE": {
+        "long_rate": 0.00025,
+        "short_rate": 0.00125,
+        "size": 1,
+        "pricetick": 0.01
+    },
+    "600255.SSE": {
+        "long_rate": 0.00025,
+        "short_rate": 0.00125,
+        "size": 1,
+        "pricetick": 0.01
+    },
+    "301000.SZSE": {
+        "long_rate": 0.00025,
+        "short_rate": 0.00125,
+        "size": 1,
+        "pricetick": 0.01
+    },
+    "603406.SSE": {
+        "long_rate": 0.00025,
+        "short_rate": 0.00125,
+        "size": 1,
+        "pricetick": 0.01
+    },
+    "002006.SZSE": {
+        "long_rate": 0.00025,
+        "short_rate": 0.00125,
+        "size": 1,
+        "pricetick": 0.01
+    },
+    "300124.SZSE": {
+        "long_rate": 0.00025,
+        "short_rate": 0.00125,
+        "size": 1,
+        "pricetick": 0.01
+    },
+    "002847.SZSE": {
+        "long_rate": 0.00025,
+        "short_rate": 0.00125,
+        "size": 1,
+        "pricetick": 0.01
+    },
+    "002611.SZSE": {
+        "long_rate": 0.00025,
+        "short_rate": 0.00125,
+        "size": 1,
+        "pricetick": 0.01
+    },
+    "300014.SZSE": {
+        "long_rate": 0.00025,
+        "short_rate": 0.00125,
+        "size": 1,
+        "pricetick": 0.01
+    },
+    "000738.SZSE": {
+        "long_rate": 0.00025,
+        "short_rate": 0.00125,
+        "size": 1,
+        "pricetick": 0.01
+    },
+    "920523.BSE": {
+        "long_rate": 0.00025,
+        "short_rate": 0.00125,
+        "size": 1,
+        "pricetick": 0.01
+    },
+    "301085.SZSE": {
+        "long_rate": 0.00025,
+        "short_rate": 0.00125,
+        "size": 1,
+        "pricetick": 0.01
+    },
+    "300127.SZSE": {
+        "long_rate": 0.00025,
+        "short_rate": 0.00125,
+        "size": 1,
+        "pricetick": 0.01
+    },
+    "300399.SZSE": {
+        "long_rate": 0.00025,
+        "short_rate": 0.00125,
+        "size": 1,
+        "pricetick": 0.01
+    },
+    "920185.BSE": {
+        "long_rate": 0.00025,
+        "short_rate": 0.00125,
+        "size": 1,
+        "pricetick": 0.01
+    },
+    "300568.SZSE": {
+        "long_rate": 0.00025,
+        "short_rate": 0.00125,
+        "size": 1,
+        "pricetick": 0.01
+    },
+    "000592.SZSE": {
+        "long_rate": 0.00025,
+        "short_rate": 0.00125,
+        "size": 1,
+        "pricetick": 0.01
+    },
+    "300457.SZSE": {
+        "long_rate": 0.00025,
+        "short_rate": 0.00125,
+        "size": 1,
+        "pricetick": 0.01
+    },
+    "002590.SZSE": {
+        "long_rate": 0.00025,
+        "short_rate": 0.00125,
+        "size": 1,
+        "pricetick": 0.01
+    },
+    "301327.SZSE": {
+        "long_rate": 0.00025,
+        "short_rate": 0.00125,
+        "size": 1,
+        "pricetick": 0.01
+    },
+    "600390.SSE": {
+        "long_rate": 0.00025,
+        "short_rate": 0.00125,
+        "size": 1,
+        "pricetick": 0.01
+    },
+    "000056.SZSE": {
+        "long_rate": 0.00025,
+        "short_rate": 0.00125,
+        "size": 1,
+        "pricetick": 0.01
+    },
+    "688411.SSE": {
+        "long_rate": 0.00025,
+        "short_rate": 0.00125,
+        "size": 1,
+        "pricetick": 0.01
+    },
+    "603201.SSE": {
+        "long_rate": 0.00025,
+        "short_rate": 0.00125,
+        "size": 1,
+        "pricetick": 0.01
+    },
+    "601601.SSE": {
+        "long_rate": 0.00025,
+        "short_rate": 0.00125,
+        "size": 1,
+        "pricetick": 0.01
+    },
+    "301180.SZSE": {
+        "long_rate": 0.00025,
+        "short_rate": 0.00125,
+        "size": 1,
+        "pricetick": 0.01
+    },
+    "300735.SZSE": {
+        "long_rate": 0.00025,
+        "short_rate": 0.00125,
+        "size": 1,
+        "pricetick": 0.01
+    },
+    "601311.SSE": {
+        "long_rate": 0.00025,
+        "short_rate": 0.00125,
+        "size": 1,
+        "pricetick": 0.01
+    },
+    "300538.SZSE": {
+        "long_rate": 0.00025,
+        "short_rate": 0.00125,
+        "size": 1,
+        "pricetick": 0.01
+    },
+    "301165.SZSE": {
+        "long_rate": 0.00025,
+        "short_rate": 0.00125,
+        "size": 1,
+        "pricetick": 0.01
+    },
+    "300342.SZSE": {
+        "long_rate": 0.00025,
+        "short_rate": 0.00125,
+        "size": 1,
+        "pricetick": 0.01
+    },
+    "000100.SZSE": {
+        "long_rate": 0.00025,
+        "short_rate": 0.00125,
+        "size": 1,
+        "pricetick": 0.01
+    },
+    "300857.SZSE": {
+        "long_rate": 0.00025,
+        "short_rate": 0.00125,
+        "size": 1,
+        "pricetick": 0.01
+    },
+    "002261.SZSE": {
+        "long_rate": 0.00025,
+        "short_rate": 0.00125,
+        "size": 1,
+        "pricetick": 0.01
+    },
+    "301518.SZSE": {
+        "long_rate": 0.00025,
+        "short_rate": 0.00125,
+        "size": 1,
+        "pricetick": 0.01
+    },
+    "301325.SZSE": {
+        "long_rate": 0.00025,
+        "short_rate": 0.00125,
+        "size": 1,
+        "pricetick": 0.01
+    },
+    "601211.SSE": {
+        "long_rate": 0.00025,
+        "short_rate": 0.00125,
+        "size": 1,
+        "pricetick": 0.01
+    },
+    "600150.SSE": {
+        "long_rate": 0.00025,
+        "short_rate": 0.00125,
+        "size": 1,
+        "pricetick": 0.01
+    },
+    "002735.SZSE": {
+        "long_rate": 0.00025,
+        "short_rate": 0.00125,
+        "size": 1,
+        "pricetick": 0.01
+    },
+    "300541.SZSE": {
+        "long_rate": 0.00025,
+        "short_rate": 0.00125,
+        "size": 1,
+        "pricetick": 0.01
+    },
+    "603239.SSE": {
+        "long_rate": 0.00025,
+        "short_rate": 0.00125,
+        "size": 1,
+        "pricetick": 0.01
+    },
+    "000008.SZSE": {
+        "long_rate": 0.00025,
+        "short_rate": 0.00125,
+        "size": 1,
+        "pricetick": 0.01
+    },
+    "300091.SZSE": {
+        "long_rate": 0.00025,
+        "short_rate": 0.00125,
+        "size": 1,
+        "pricetick": 0.01
+    },
+    "301363.SZSE": {
+        "long_rate": 0.00025,
+        "short_rate": 0.00125,
+        "size": 1,
+        "pricetick": 0.01
+    },
+    "600410.SSE": {
+        "long_rate": 0.00025,
+        "short_rate": 0.00125,
+        "size": 1,
+        "pricetick": 0.01
+    },
+    "603939.SSE": {
+        "long_rate": 0.00025,
+        "short_rate": 0.00125,
+        "size": 1,
+        "pricetick": 0.01
+    },
+    "301186.SZSE": {
+        "long_rate": 0.00025,
+        "short_rate": 0.00125,
+        "size": 1,
+        "pricetick": 0.01
+    },
+    "301162.SZSE": {
+        "long_rate": 0.00025,
+        "short_rate": 0.00125,
+        "size": 1,
+        "pricetick": 0.01
+    },
+    "000034.SZSE": {
+        "long_rate": 0.00025,
+        "short_rate": 0.00125,
+        "size": 1,
+        "pricetick": 0.01
+    },
+    "002230.SZSE": {
+        "long_rate": 0.00025,
+        "short_rate": 0.00125,
+        "size": 1,
+        "pricetick": 0.01
+    },
+    "601778.SSE": {
+        "long_rate": 0.00025,
+        "short_rate": 0.00125,
+        "size": 1,
+        "pricetick": 0.01
+    },
+    "601669.SSE": {
+        "long_rate": 0.00025,
+        "short_rate": 0.00125,
+        "size": 1,
+        "pricetick": 0.01
+    },
+    "300229.SZSE": {
+        "long_rate": 0.00025,
+        "short_rate": 0.00125,
+        "size": 1,
+        "pricetick": 0.01
+    },
+    "920273.BSE": {
+        "long_rate": 0.00025,
+        "short_rate": 0.00125,
+        "size": 1,
+        "pricetick": 0.01
+    },
+    "920599.BSE": {
+        "long_rate": 0.00025,
+        "short_rate": 0.00125,
+        "size": 1,
+        "pricetick": 0.01
+    },
+    "301638.SZSE": {
+        "long_rate": 0.00025,
+        "short_rate": 0.00125,
+        "size": 1,
+        "pricetick": 0.01
+    },
+    "601127.SSE": {
+        "long_rate": 0.00025,
+        "short_rate": 0.00125,
+        "size": 1,
+        "pricetick": 0.01
+    },
+    "600031.SSE": {
+        "long_rate": 0.00025,
+        "short_rate": 0.00125,
+        "size": 1,
+        "pricetick": 0.01
+    },
+    "603881.SSE": {
+        "long_rate": 0.00025,
+        "short_rate": 0.00125,
+        "size": 1,
+        "pricetick": 0.01
+    },
+    "300760.SZSE": {
+        "long_rate": 0.00025,
+        "short_rate": 0.00125,
+        "size": 1,
+        "pricetick": 0.01
+    },
+    "300985.SZSE": {
+        "long_rate": 0.00025,
+        "short_rate": 0.00125,
+        "size": 1,
+        "pricetick": 0.01
+    },
+    "301489.SZSE": {
+        "long_rate": 0.00025,
+        "short_rate": 0.00125,
+        "size": 1,
+        "pricetick": 0.01
+    },
+    "300835.SZSE": {
+        "long_rate": 0.00025,
+        "short_rate": 0.00125,
+        "size": 1,
+        "pricetick": 0.01
+    },
+    "600203.SSE": {
+        "long_rate": 0.00025,
+        "short_rate": 0.00125,
+        "size": 1,
+        "pricetick": 0.01
+    },
+    "920017.BSE": {
+        "long_rate": 0.00025,
+        "short_rate": 0.00125,
+        "size": 1,
+        "pricetick": 0.01
+    },
+    "300181.SZSE": {
+        "long_rate": 0.00025,
+        "short_rate": 0.00125,
+        "size": 1,
+        "pricetick": 0.01
+    },
+    "300002.SZSE": {
+        "long_rate": 0.00025,
+        "short_rate": 0.00125,
+        "size": 1,
+        "pricetick": 0.01
+    },
+    "002773.SZSE": {
+        "long_rate": 0.00025,
+        "short_rate": 0.00125,
+        "size": 1,
+        "pricetick": 0.01
+    },
+    "600882.SSE": {
+        "long_rate": 0.00025,
+        "short_rate": 0.00125,
+        "size": 1,
+        "pricetick": 0.01
+    },
+    "603123.SSE": {
+        "long_rate": 0.00025,
+        "short_rate": 0.00125,
+        "size": 1,
+        "pricetick": 0.01
+    },
+    "002149.SZSE": {
+        "long_rate": 0.00025,
+        "short_rate": 0.00125,
+        "size": 1,
+        "pricetick": 0.01
+    },
+    "600602.SSE": {
+        "long_rate": 0.00025,
+        "short_rate": 0.00125,
+        "size": 1,
+        "pricetick": 0.01
     }
 }

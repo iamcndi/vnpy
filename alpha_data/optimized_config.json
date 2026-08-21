@@ -1,24 +1,24 @@
 {
-  "generated_at": "2026-07-02 11:27:06",
+  "generated_at": "2026-08-19 15:14:36",
   "optimized_params": {
-    "long_top_n_ratio": 0.16666666666666666,
-    "min_signal_threshold": 0.7,
+    "long_top_n_ratio": 0.43333333333333335,
+    "min_signal_threshold": 0.3,
     "confidence_scale": 1.5
   },
   "model_status": {
     "retrain_needed": false,
     "drift_detected": false,
     "feature_count": 10,
-    "ic_decline": 0.0
+    "ic_decline": -0.0992586593445193
   },
   "evaluation_summary": {
-    "total_days": 7,
-    "mean_ic": 0.09493209453080051,
-    "mean_hit_rate": 0.5443734335839598
+    "total_days": 25,
+    "mean_ic": 0.10871570582378658,
+    "mean_hit_rate": 0.5023894993894994
   },
   "retraining_schedule": {
-    "days_since_last_train": 0,
+    "days_since_last_train": 1,
     "recommended_retrain_date": null,
-    "retrain_reason": "已于 2026-07-02 完成重训练 (run_ml.py)"
+    "retrain_reason": null
   }
 }

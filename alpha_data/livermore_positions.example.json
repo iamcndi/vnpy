@@ -1,0 +1,22 @@
+{
+  "updated": "2026-08-21",
+  "cash": 22000,
+  "positions": {
+    "600031.SSE": {
+      "shares": 100,
+      "cost": 12.50,
+      "high": 14.80,
+      "last_buy": 12.50,
+      "stage": 1,
+      "halved": false
+    },
+    "300014.SZSE": {
+      "shares": 200,
+      "cost": 48.20,
+      "high": 56.00,
+      "last_buy": 52.10,
+      "stage": 2,
+      "halved": false
+    }
+  }
+}

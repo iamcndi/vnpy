@@ -31,6 +31,7 @@ from vnpy.alpha import AlphaLab, BacktestingEngine, AlphaStrategy, logger
 from vnpy.trader.constant import Interval, Exchange, Direction
 from vnpy.trader.object import BarData
 
+from stock_universe import STOCK_LIST
 from datafeed import download_daily_data, data_end_date
 
 
@@ -41,33 +42,6 @@ from datafeed import download_daily_data, data_end_date
 ALPHA_LAB_PATH = os.path.join(PROJECT_DIR, "alpha_data")
 
 # 持仓股票列表（来自持有.csv）
-STOCK_LIST: list[tuple[str, str, str]] = [
-    ("002245", "SZSE", "蔚蓝锂芯"),
-    ("600487", "SSE", "亨通光电"),
-    ("600089", "SSE", "特变电工"),
-    ("002532", "SZSE", "天山铝业"),
-    ("300316", "SZSE", "晶盛机电"),
-    ("300843", "SZSE", "胜蓝股份"),
-    ("300438", "SZSE", "鹏辉能源"),
-    ("000338", "SZSE", "潍柴动力"),
-    ("300661", "SZSE", "圣邦股份"),
-    ("300507", "SZSE", "苏奥传感"),
-    ("301511", "SZSE", "德福科技"),
-    ("300442", "SZSE", "润泽科技"),
-    ("301498", "SZSE", "乖宝宠物"),
-    ("002299", "SZSE", "圣农发展"),
-    ("601717", "SSE", "中创智领"),
-    ("002639", "SZSE", "雪人集团"),
-    ("601665", "SSE", "齐鲁银行"),
-    ("600580", "SSE", "卧龙电驱"),
-    ("301217", "SZSE", "铜冠铜箔"),
-    ("300484", "SZSE", "蓝海华腾"),
-    ("518800", "SSE", "黄金ETF国泰"),
-    ("688523", "SSE", "航天环宇"),
-    ("300433", "SZSE", "蓝思科技"),
-    ("300811", "SZSE", "铂科新材"),
-    ("300136", "SZSE", "信维通信"),
-]
 
 # 回测时间范围
 BACKTEST_START = "2023-01-01"
