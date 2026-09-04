@@ -1,9 +1,16 @@
 """
 自选股股票池（来源: 文档/记录信息/自选股.csv）
-已剔除港股、ETF。
+A 股用于训练/预测/回测；港股仅用于 check_trend 趋势查看。
 """
 
 from __future__ import annotations
+
+# 港股（仅 check_trend.py 趋势检查，不参与 predict_daily / ML 训练）
+HK_STOCK_LIST: list[tuple[str, str, str]] = [
+    ("01024", "SEHK", "快手-W"),
+    ("09988", "SEHK", "阿里巴巴-W"),
+    ("09992", "SEHK", "泡泡玛特"),
+]
 
 STOCK_LIST: list[tuple[str, str, str]] = [
     ("688679", "SSE", "通源环境"),
@@ -16,6 +23,7 @@ STOCK_LIST: list[tuple[str, str, str]] = [
     ("301217", "SZSE", "铜冠铜箔"),
     ("300153", "SZSE", "科泰电源"),
     ("601609", "SSE", "金田股份"),
+    ("601665", "SSE", "齐鲁银行"),
     ("300475", "SZSE", "香农芯创"),
     ("301306", "SZSE", "西测测试"),
     ("300843", "SZSE", "胜蓝股份"),
@@ -174,4 +182,39 @@ STOCK_LIST: list[tuple[str, str, str]] = [
     ("603123", "SSE", "翠微股份"),
     ("002149", "SZSE", "西部材料"),
     ("600602", "SSE", "云赛智联"),
+    ("000538", "SZSE", "云南白药"),
 ]
+
+
+def normalize_hk_code(raw: str) -> str:
+    """港股代码规范为 5 位，如 1024 → 01024"""
+    s = raw.strip().upper().replace(".SEHK", "")
+    if not s.isdigit():
+        raise ValueError(f"无效港股代码: {raw}")
+    return s.zfill(5)
+
+
+def stock_name(vt_symbol: str) -> str:
+    code, _, name = stock_entry(vt_symbol)
+    return name
+
+
+def stock_entry(vt_symbol: str) -> tuple[str, str, str]:
+    """按 vt_symbol 查找 (code, exchange, name)"""
+    if "." in vt_symbol:
+        code, exch = vt_symbol.split(".", 1)
+    else:
+        code, exch = vt_symbol, ""
+    for c, e, n in STOCK_LIST + HK_STOCK_LIST:
+        if f"{c}.{e}" == vt_symbol or (not exch and c == code):
+            return c, e, n
+    raise KeyError(vt_symbol)
+
+
+def is_hk_vt_symbol(vt_symbol: str) -> bool:
+    if vt_symbol.endswith(".SEHK"):
+        return True
+    try:
+        return stock_entry(vt_symbol)[1] == "SEHK"
+    except KeyError:
+        return False

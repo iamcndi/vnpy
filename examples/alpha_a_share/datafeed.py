@@ -12,7 +12,7 @@ import json
 import shutil
 import subprocess
 import time
-from datetime import datetime, timedelta
+from datetime import datetime
 
 import baostock as bs
 import polars as pl
@@ -33,6 +33,7 @@ EXCHANGE_VT2BS = {
 
 BAOSTOCK_FIELDS = "date,open,high,low,close,volume,amount"
 EASTMONEY_KLINE_URL = "https://push2his.eastmoney.com/api/qt/stock/kline/get"
+TENCENT_HK_KLINE_URL = "https://web.ifzq.gtimg.cn/appstock/app/fqkline/get"
 
 
 def data_end_date() -> str:
@@ -44,20 +45,26 @@ def _to_ak_date(date_str: str) -> str:
     return date_str.replace("-", "")
 
 
-def _next_date(date_str: str) -> str:
-    dt = datetime.strptime(date_str, "%Y-%m-%d") + timedelta(days=1)
-    return dt.strftime("%Y-%m-%d")
-
-
 def _is_etf(symbol: str) -> bool:
     return symbol.startswith(("51", "15", "56", "58"))
 
 
-def _eastmoney_secid(code: str) -> str:
-    """东方财富 secid：沪市 1.xxxxxx，深市 0.xxxxxx"""
+def _is_hk_exchange(exchange: Exchange) -> bool:
+    return exchange == Exchange.SEHK
+
+
+def _eastmoney_secid(code: str, exchange: Exchange) -> str:
+    """东方财富 secid：A 股 0/1.xxxxxx，港股 116.xxxxx"""
+    if _is_hk_exchange(exchange):
+        return f"116.{code}"
     if _is_etf(code):
         return f"1.{code}" if code.startswith(("51", "56", "58")) else f"0.{code}"
     return f"1.{code}" if code.startswith("6") else f"0.{code}"
+
+
+def _volume_scale(exchange: Exchange) -> float:
+    """A 股东财成交量为手；港股为股"""
+    return 1.0 if _is_hk_exchange(exchange) else VOLUME_LOT_SIZE
 
 
 def _klines_to_bars(
@@ -65,7 +72,10 @@ def _klines_to_bars(
     code: str,
     exchange: Exchange,
     gateway_name: str,
+    volume_scale: float | None = None,
 ) -> list[BarData]:
+    if volume_scale is None:
+        volume_scale = _volume_scale(exchange)
     bars: list[BarData] = []
     for line in klines:
         parts = line.split(",")
@@ -84,7 +94,7 @@ def _klines_to_bars(
             high_price=float(h_str),
             low_price=float(l_str),
             close_price=close,
-            volume=float(v_str) * VOLUME_LOT_SIZE,
+            volume=float(v_str) * volume_scale,
             turnover=float(a_str),
             gateway_name=gateway_name,
         ))
@@ -98,7 +108,8 @@ def fetch_bars_eastmoney(
     end_date: str,
 ) -> list[BarData]:
     """东方财富 K 线（curl_cffi / curl 直连，绕过系统代理）"""
-    secid = _eastmoney_secid(code)
+    secid = _eastmoney_secid(code, exchange)
+    vol_scale = _volume_scale(exchange)
     params = {
         "fields1": "f1,f2,f3,f4,f5,f6",
         "fields2": "f51,f52,f53,f54,f55,f56,f57,f58,f59,f60,f61,f116",
@@ -123,7 +134,7 @@ def fetch_bars_eastmoney(
         )
         payload = resp.json()
         klines = (payload.get("data") or {}).get("klines") or []
-        bars = _klines_to_bars(klines, code, exchange, "EM")
+        bars = _klines_to_bars(klines, code, exchange, "EM", vol_scale)
         if bars:
             return bars
     except Exception:
@@ -151,7 +162,86 @@ def fetch_bars_eastmoney(
 
     payload = json.loads(proc.stdout)
     klines = (payload.get("data") or {}).get("klines") or []
-    return _klines_to_bars(klines, code, exchange, "EM")
+    return _klines_to_bars(klines, code, exchange, "EM", vol_scale)
+
+
+def _tencent_hk_symbol(code: str) -> str:
+    """腾讯港股代码需 5 位，如 01024 → hk01024"""
+    return f"hk{code.zfill(5)}"
+
+
+def fetch_bars_tencent_hk(
+    code: str,
+    exchange: Exchange,
+    start_date: str,
+    end_date: str,
+) -> list[BarData]:
+    """腾讯财经港股日线（前复权）；东财不可用时的备用源"""
+    symbol = _tencent_hk_symbol(code)
+    # 腾讯接口按条数返回，640 根日线约 2.5 年
+    param = f"{symbol},day,,,640,qfq"
+    url = f"{TENCENT_HK_KLINE_URL}?param={param}"
+
+    payload: dict | None = None
+    try:
+        from curl_cffi import requests as cffi_requests
+
+        resp = cffi_requests.get(
+            url,
+            impersonate="chrome",
+            timeout=30,
+            proxies={"http": None, "https": None},
+        )
+        payload = resp.json()
+    except Exception:
+        payload = None
+
+    if not payload and shutil.which("curl"):
+        proc = subprocess.run(
+            [
+                "curl", "-sS", "--noproxy", "*", "-m", "30",
+                "-A", "Mozilla/5.0",
+                url,
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if proc.returncode == 0 and proc.stdout.strip():
+            payload = json.loads(proc.stdout)
+
+    if not payload:
+        return []
+
+    rows = (payload.get("data") or {}).get(symbol, {}).get("day") or []
+    start_dt = datetime.strptime(start_date, "%Y-%m-%d").date()
+    end_dt = datetime.strptime(end_date, "%Y-%m-%d").date()
+
+    bars: list[BarData] = []
+    for row in rows:
+        if not row or len(row) < 6:
+            continue
+        date_str, o_str, c_str, h_str, l_str, v_str = row[:6]
+        dt = datetime.strptime(date_str, "%Y-%m-%d").date()
+        if dt < start_dt or dt > end_dt:
+            continue
+        close = float(c_str)
+        if close <= 0:
+            continue
+        bars.append(BarData(
+            symbol=code,
+            exchange=exchange,
+            datetime=datetime.combine(dt, datetime.min.time()),
+            interval=Interval.DAILY,
+            open_price=float(o_str),
+            high_price=float(h_str),
+            low_price=float(l_str),
+            close_price=close,
+            volume=float(v_str),
+            turnover=0.0,
+            gateway_name="TX",
+        ))
+    return bars
 
 
 def _df_to_bars(
@@ -212,8 +302,20 @@ def fetch_bars_akshare(
         "http_proxy", "https_proxy", "all_proxy",
     )
     saved_proxy = {k: os.environ.pop(k, None) for k in proxy_keys}
+    saved_no_proxy = os.environ.get("NO_PROXY")
+    os.environ["NO_PROXY"] = "*"
+    os.environ["no_proxy"] = "*"
 
     try:
+        if _is_hk_exchange(exchange):
+            df = ak.stock_hk_hist(
+                symbol=code,
+                period="daily",
+                start_date=ak_start,
+                end_date=ak_end,
+                adjust="qfq",
+            )
+            return _df_to_bars(df, code, exchange, "AK", volume_scale=1.0)
         if _is_etf(code):
             df = ak.fund_etf_hist_em(
                 symbol=code,
@@ -234,6 +336,11 @@ def fetch_bars_akshare(
         for key, value in saved_proxy.items():
             if value is not None:
                 os.environ[key] = value
+        if saved_no_proxy is None:
+            os.environ.pop("NO_PROXY", None)
+            os.environ.pop("no_proxy", None)
+        else:
+            os.environ["NO_PROXY"] = saved_no_proxy
 
     return _df_to_bars(df, code, exchange, "AK")
 
@@ -287,7 +394,8 @@ def _resolve_start_date(
         df = pl.read_parquet(parquet_path)
         last_date = df["datetime"].max()
         if last_date:
-            return _next_date(last_date.strftime("%Y-%m-%d")), "增量更新"
+            # 从最后一根重拉：当天 K 盘中/收盘后会变，不能当成已定稿
+            return last_date.strftime("%Y-%m-%d"), "增量更新"
     return backtest_start, "全量下载"
 
 
@@ -299,7 +407,10 @@ def download_daily_data(
     """下载/增量更新日线至最新（东方财富/akshare 优先，失败则回退 baostock）"""
     end_date = data_end_date()
     print(f"  目标截止日期: {end_date}")
-    print("  数据源: 东方财富/akshare (优先) → baostock (回退)")
+    if any(e == Exchange.SEHK.value for _, e, _ in stock_list):
+        print("  数据源: 港股→腾讯(优先) / 东财 / akshare | A股→东财 / akshare / baostock")
+    else:
+        print("  数据源: 东方财富/akshare (优先) → baostock (回退)")
 
     bs_logged_in = False
 
@@ -322,12 +433,21 @@ def download_daily_data(
             bars: list[BarData] = []
             source = ""
 
-            try:
-                bars = fetch_bars_eastmoney(code, exchange, start_date, end_date)
-                if bars:
-                    source = "eastmoney"
-            except Exception as exc:
-                print(f"    东方财富直连失败: {exc}")
+            if _is_hk_exchange(exchange):
+                try:
+                    bars = fetch_bars_tencent_hk(code, exchange, start_date, end_date)
+                    if bars:
+                        source = "tencent"
+                except Exception as exc:
+                    print(f"    腾讯财经失败: {exc}")
+
+            if not bars:
+                try:
+                    bars = fetch_bars_eastmoney(code, exchange, start_date, end_date)
+                    if bars:
+                        source = "eastmoney"
+                except Exception as exc:
+                    print(f"    东方财富直连失败: {exc}")
 
             if not bars:
                 try:
@@ -337,7 +457,7 @@ def download_daily_data(
                 except Exception as exc:
                     print(f"    akshare 失败: {exc}")
 
-            if not bars:
+            if not bars and not _is_hk_exchange(exchange):
                 if not bs_logged_in:
                     lg = bs.login()
                     if lg.error_code != "0":

@@ -86,7 +86,7 @@ class AlphaLab:
 
             new_df = pl.concat([old_df, new_df])
 
-            new_df = new_df.unique(subset=["datetime"])
+            new_df = new_df.unique(subset=["datetime"], keep="last")
 
             new_df = new_df.sort("datetime")
 
