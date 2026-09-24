@@ -2,9 +2,7 @@
 
 from typing import cast
 
-from scipy import stats
 import polars as pl
-import numpy as np
 
 from .utility import DataProxy
 
@@ -64,7 +62,7 @@ def ts_rank(feature: DataProxy, window: int) -> DataProxy:
     df: pl.DataFrame = feature.df.select(
         pl.col("datetime"),
         pl.col("vt_symbol"),
-        pl.col("data").rolling_map(lambda s: stats.percentileofscore(s, s[-1]) / 100, window).over("vt_symbol")
+        (pl.col("data").rolling_rank(window, method="average").over("vt_symbol") / window)
     )
     return DataProxy(df)
 
@@ -84,7 +82,7 @@ def ts_mean(feature: DataProxy, window: int) -> DataProxy:
     df: pl.DataFrame = feature.df.select(
         pl.col("datetime"),
         pl.col("vt_symbol"),
-        pl.col("data").rolling_map(lambda s: np.nanmean(s), window, min_samples=1).over("vt_symbol")
+        pl.col("data").rolling_mean(window, min_samples=1).over("vt_symbol")
     )
     return DataProxy(df)
 
@@ -94,7 +92,7 @@ def ts_std(feature: DataProxy, window: int) -> DataProxy:
     df: pl.DataFrame = feature.df.select(
         pl.col("datetime"),
         pl.col("vt_symbol"),
-        pl.col("data").rolling_map(lambda s: np.nanstd(s, ddof=0), window, min_samples=1).over("vt_symbol")
+        pl.col("data").rolling_std(window, min_samples=1, ddof=0).over("vt_symbol")
     )
     return DataProxy(df)
 
@@ -132,7 +130,9 @@ def ts_quantile(feature: DataProxy, window: int, quantile: float) -> DataProxy:
     df: pl.DataFrame = feature.df.select(
         pl.col("datetime"),
         pl.col("vt_symbol"),
-        pl.col("data").rolling_map(lambda s: s.quantile(quantile=quantile, interpolation="linear"), window).over("vt_symbol")
+        pl.col("data").rolling_quantile(
+            quantile, interpolation="linear", window_size=window
+        ).over("vt_symbol")
     )
     return DataProxy(df)
 

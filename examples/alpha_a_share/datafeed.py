@@ -24,6 +24,7 @@ from vnpy.trader.object import BarData
 DEFAULT_START = "2023-01-01"
 VOLUME_LOT_SIZE = 100  # 东方财富成交量单位：手 → 股
 REQUEST_INTERVAL = 1.0  # 限速，避免被东方财富断开连接
+EASTMONEY_FAIL_LIMIT = 3  # 连续失败后本轮不再重试东财/akshare
 
 EXCHANGE_VT2BS = {
     Exchange.SSE: "sh",
@@ -413,6 +414,8 @@ def download_daily_data(
         print("  数据源: 东方财富/akshare (优先) → baostock (回退)")
 
     bs_logged_in = False
+    eastmoney_fails = 0
+    skip_eastmoney = False
 
     try:
         for code, exchange_str, name in stock_list:
@@ -432,6 +435,7 @@ def download_daily_data(
 
             bars: list[BarData] = []
             source = ""
+            tried_eastmoney = False
 
             if _is_hk_exchange(exchange):
                 try:
@@ -441,7 +445,8 @@ def download_daily_data(
                 except Exception as exc:
                     print(f"    腾讯财经失败: {exc}")
 
-            if not bars:
+            if not bars and not skip_eastmoney:
+                tried_eastmoney = True
                 try:
                     bars = fetch_bars_eastmoney(code, exchange, start_date, end_date)
                     if bars:
@@ -449,13 +454,21 @@ def download_daily_data(
                 except Exception as exc:
                     print(f"    东方财富直连失败: {exc}")
 
-            if not bars:
-                try:
-                    bars = fetch_bars_akshare(code, exchange, start_date, end_date)
-                    if bars:
-                        source = "akshare"
-                except Exception as exc:
-                    print(f"    akshare 失败: {exc}")
+                if not bars:
+                    try:
+                        bars = fetch_bars_akshare(code, exchange, start_date, end_date)
+                        if bars:
+                            source = "akshare"
+                    except Exception as exc:
+                        print(f"    akshare 失败: {exc}")
+
+                if bars:
+                    eastmoney_fails = 0
+                else:
+                    eastmoney_fails += 1
+                    if eastmoney_fails >= EASTMONEY_FAIL_LIMIT:
+                        skip_eastmoney = True
+                        print("  东财连续失败，本轮剩余股票改走 baostock")
 
             if not bars and not _is_hk_exchange(exchange):
                 if not bs_logged_in:
@@ -478,7 +491,8 @@ def download_daily_data(
             else:
                 print("    - 无新数据")
 
-            time.sleep(REQUEST_INTERVAL)
+            if tried_eastmoney:
+                time.sleep(REQUEST_INTERVAL)
 
     finally:
         if bs_logged_in:
