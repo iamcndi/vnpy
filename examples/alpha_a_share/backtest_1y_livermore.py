@@ -61,6 +61,13 @@ ADD_SPACING_GRID = [0.05, 0.08, 0.10]
 STOP_LOSS_PCT = 0.07
 TRAIL_ACTIVATE_PCT = 0.15
 TRAIL_PULLBACK_PCT = 0.08
+# 早期盈利区 (+3%~+15%)：峰值浮盈达 arm 后、移动止盈激活前，从高点回撤 X% → 清仓
+EARLY_ZONE_ARM_PCT = 0.03
+EARLY_ZONE_MAX_PCT = TRAIL_ACTIVATE_PCT  # 与移动止盈激活线一致，之上交给 15%/8% 规则
+EARLY_ZONE_PULLBACK_GRID = [0.02, 0.03, 0.05, 0.08, 0.10]
+# 盈利锁利（固定回落线）：曾浮盈 ≥3% 后回撤至 ≤1% → 清仓（旧测试）
+PROFIT_LOCK_ARM_PCT = 0.03
+PROFIT_LOCK_EXIT_PCT = 0.01
 
 
 def round_lot(shares: float | int, lot: int = MIN_LOT) -> int:
@@ -150,7 +157,7 @@ def update_cost_and_high(strategy, trade: TradeData) -> None:
         if strategy.get_pos(vt_symbol) <= 0:
             strategy.cost_basis.pop(vt_symbol, None)
             strategy.high_price.pop(vt_symbol, None)
-            for attr in ("last_buy_price", "pyramid_stage", "trail_armed", "halved"):
+            for attr in ("last_buy_price", "pyramid_stage", "trail_armed", "halved", "profit_lock_armed"):
                 mapping = getattr(strategy, attr, None)
                 if isinstance(mapping, dict):
                     mapping.pop(vt_symbol, None)
@@ -251,6 +258,11 @@ class LivermoreStrategy(AlphaStrategy):
     trail_activate_pct = TRAIL_ACTIVATE_PCT
     trail_pullback_pct = TRAIL_PULLBACK_PCT
     pyramid_fractions = PYRAMID_FRACTIONS
+    profit_lock_arm_pct = 0.0   # >0 启用：峰值浮盈达此比例后武装
+    profit_lock_exit_pct = 0.0  # 武装后浮盈回落至此比例 → 清仓（固定线模式）
+    early_zone_pullback_pct = 0.0  # >0 启用：+arm~+trail 区间从高点回撤此比例 → 清仓
+    early_zone_giveback_pct = 0.0  # >0 启用：早期区吐回峰值利润的此比例 → 清仓
+    trail_giveback_pct = 0.0       # >0 启用：+15% 后吐回峰值利润的此比例 → 减半/清
 
     def on_init(self) -> None:
         self.cost_basis: dict[str, float] = {}
@@ -259,16 +271,39 @@ class LivermoreStrategy(AlphaStrategy):
         self.pyramid_stage: dict[str, int] = {}
         self.trail_armed: dict[str, bool] = {}
         self.halved: dict[str, bool] = {}
+        self.profit_lock_armed: dict[str, bool] = {}
         self.close_history: dict[str, list[float]] = defaultdict(list)
         self.entry_count = 0
         self.add_count = 0
         self.half_count = 0
         self.stop_count = 0
         self.trail_clear_count = 0
+        self.profit_lock_count = 0
+        self.early_zone_exit_count = 0
+        lock_msg = ""
+        if self.early_zone_giveback_pct > 0:
+            lock_msg = (
+                f" 早期区={self.profit_lock_arm_pct:.0%}~{self.trail_activate_pct:.0%}"
+                f" 吐回利润{self.early_zone_giveback_pct:.0%}清"
+            )
+        elif self.early_zone_pullback_pct > 0:
+            lock_msg = (
+                f" 早期区={self.profit_lock_arm_pct:.0%}~{self.trail_activate_pct:.0%}"
+                f" 回撤{self.early_zone_pullback_pct:.0%}清"
+            )
+        elif self.profit_lock_arm_pct > 0 and self.profit_lock_exit_pct > 0:
+            lock_msg = (
+                f" 盈利锁利={self.profit_lock_arm_pct:.0%}→{self.profit_lock_exit_pct:.0%}"
+            )
+        trail_msg = (
+            f" 移动吐回{self.trail_giveback_pct:.0%}"
+            if self.trail_giveback_pct > 0
+            else f" 移动A/B={self.trail_activate_pct:.0%}/{self.trail_pullback_pct:.0%}"
+        )
         self.write_log(
             f"利弗莫尔策略初始化 N={self.breakout_window} X={self.add_spacing_pct:.0%} "
-            f"金字塔={self.pyramid_fractions} SL={self.stop_loss_pct:.0%} "
-            f"移动A/B={self.trail_activate_pct:.0%}/{self.trail_pullback_pct:.0%}"
+            f"金字塔={self.pyramid_fractions} SL={self.stop_loss_pct:.0%}"
+            f"{trail_msg}{lock_msg}"
         )
 
     def _reset_symbol(self, vt_symbol: str) -> None:
@@ -278,6 +313,7 @@ class LivermoreStrategy(AlphaStrategy):
         self.pyramid_stage.pop(vt_symbol, None)
         self.trail_armed.pop(vt_symbol, None)
         self.halved.pop(vt_symbol, None)
+        self.profit_lock_armed.pop(vt_symbol, None)
 
     def _is_breakout(self, vt_symbol: str, close: float) -> bool:
         hist = self.close_history[vt_symbol]
@@ -336,12 +372,47 @@ class LivermoreStrategy(AlphaStrategy):
                 self.stop_count += 1
                 continue
 
-            if (peak - cost) / cost >= self.trail_activate_pct:
+            peak_pnl = (peak - cost) / cost
+            in_early_zone = (
+                self.profit_lock_arm_pct <= peak_pnl < self.trail_activate_pct
+            )
+
+            if in_early_zone and peak > cost:
+                if self.early_zone_giveback_pct > 0:
+                    # 吐回峰值利润的 α：清仓价 = 高点 - (高点-成本)×α
+                    if (peak - price) >= (peak - cost) * self.early_zone_giveback_pct:
+                        targets[vt_symbol] = 0
+                        self.early_zone_exit_count += 1
+                        continue
+                elif self.early_zone_pullback_pct > 0 and peak > 0:
+                    pullback = (peak - price) / peak
+                    if pullback >= self.early_zone_pullback_pct:
+                        targets[vt_symbol] = 0
+                        self.early_zone_exit_count += 1
+                        continue
+
+            if (
+                self.profit_lock_arm_pct > 0
+                and self.profit_lock_exit_pct > 0
+                and self.early_zone_pullback_pct <= 0
+                and self.early_zone_giveback_pct <= 0
+            ):
+                if peak_pnl >= self.profit_lock_arm_pct:
+                    self.profit_lock_armed[vt_symbol] = True
+                if self.profit_lock_armed.get(vt_symbol) and pnl <= self.profit_lock_exit_pct:
+                    targets[vt_symbol] = 0
+                    self.profit_lock_count += 1
+                    continue
+
+            if peak_pnl >= self.trail_activate_pct:
                 self.trail_armed[vt_symbol] = True
 
-            if self.trail_armed.get(vt_symbol) and peak > 0:
-                pullback = (peak - price) / peak
-                if pullback >= self.trail_pullback_pct:
+            if self.trail_armed.get(vt_symbol) and peak > cost:
+                if self.trail_giveback_pct > 0:
+                    hit = (peak - price) >= (peak - cost) * self.trail_giveback_pct
+                else:
+                    hit = peak > 0 and (peak - price) / peak >= self.trail_pullback_pct
+                if hit:
                     if not self.halved.get(vt_symbol, False):
                         half = round_lot(pos // 2)
                         # 不足一手则直接清仓
@@ -383,6 +454,7 @@ class LivermoreStrategy(AlphaStrategy):
                 self.pyramid_stage[vt_symbol] = max(self.pyramid_stage.get(vt_symbol, 1), 1)
                 self.trail_armed[vt_symbol] = False
                 self.halved[vt_symbol] = False
+                self.profit_lock_armed[vt_symbol] = False
             else:
                 self.add_count += 1
         update_cost_and_high(self, trade)
@@ -543,6 +615,77 @@ def main() -> None:
         f"回撤清仓={best['trail_clear_count']}"
     )
 
+    best_x = best["X"]
+    print(f"\n[5/5] 盈利锁利规则对比 (X={best_x:.0%})...")
+    print(
+        f"  规则: 峰值浮盈 ≥{PROFIT_LOCK_ARM_PCT:.0%} 后，"
+        f"回落到 ≤{PROFIT_LOCK_EXIT_PCT:.0%} → 清仓"
+    )
+    print(
+        "  原策略: 此区间不会卖，除非 -7% 止损 或 +15% 后回撤 8% 移动止盈"
+    )
+    base_setting = {"add_spacing_pct": best_x}
+    lock_setting = {
+        "add_spacing_pct": best_x,
+        "profit_lock_arm_pct": PROFIT_LOCK_ARM_PCT,
+        "profit_lock_exit_pct": PROFIT_LOCK_EXIT_PCT,
+    }
+    stats_lm_base, eng_base = run_one(lab, vt_symbols, signal_df, LivermoreStrategy, base_setting)
+    stats_lm_lock, eng_lock = run_one(lab, vt_symbols, signal_df, LivermoreStrategy, lock_setting)
+    st_base = eng_base.strategy
+    st_lock = eng_lock.strategy
+    profit_lock_compare = {
+        "X": best_x,
+        "profit_lock_arm": PROFIT_LOCK_ARM_PCT,
+        "profit_lock_exit": PROFIT_LOCK_EXIT_PCT,
+        "original": {
+            **pick_stats(stats_lm_base),
+            "stop_count": getattr(st_base, "stop_count", 0),
+            "half_count": getattr(st_base, "half_count", 0),
+            "trail_clear_count": getattr(st_base, "trail_clear_count", 0),
+            "profit_lock_count": 0,
+        },
+        "with_profit_lock": {
+            **pick_stats(stats_lm_lock),
+            "stop_count": getattr(st_lock, "stop_count", 0),
+            "half_count": getattr(st_lock, "half_count", 0),
+            "trail_clear_count": getattr(st_lock, "trail_clear_count", 0),
+            "profit_lock_count": getattr(st_lock, "profit_lock_count", 0),
+        },
+        "delta": {
+            "annual_return": stats_lm_lock.get("annual_return", 0) - stats_lm_base.get("annual_return", 0),
+            "sharpe_ratio": stats_lm_lock.get("sharpe_ratio", 0) - stats_lm_base.get("sharpe_ratio", 0),
+            "max_ddpercent": stats_lm_lock.get("max_ddpercent", 0) - stats_lm_base.get("max_ddpercent", 0),
+            "total_trade_count": stats_lm_lock.get("total_trade_count", 0) - stats_lm_base.get("total_trade_count", 0),
+        },
+    }
+
+    print("\n" + "=" * 98)
+    print(f"  盈利锁利 vs 原利弗莫尔 (X={best_x:.0%})")
+    print("=" * 98)
+    _line(f"原利弗莫尔 X={best_x:.0%}", stats_lm_base)
+    _line(
+        f"利弗莫尔+锁利 {PROFIT_LOCK_ARM_PCT:.0%}→{PROFIT_LOCK_EXIT_PCT:.0%}",
+        stats_lm_lock,
+    )
+    print(
+        f"\n  原策略退出: 止损={profit_lock_compare['original']['stop_count']} "
+        f"减半={profit_lock_compare['original']['half_count']} "
+        f"回撤清={profit_lock_compare['original']['trail_clear_count']}"
+    )
+    print(
+        f"  加锁利后: 止损={profit_lock_compare['with_profit_lock']['stop_count']} "
+        f"减半={profit_lock_compare['with_profit_lock']['half_count']} "
+        f"回撤清={profit_lock_compare['with_profit_lock']['trail_clear_count']} "
+        f"锁利清={profit_lock_compare['with_profit_lock']['profit_lock_count']}"
+    )
+    print(
+        f"  Δ年化={profit_lock_compare['delta']['annual_return']:+.2f}%  "
+        f"Δ夏普={profit_lock_compare['delta']['sharpe_ratio']:+.2f}  "
+        f"Δ回撤={profit_lock_compare['delta']['max_ddpercent']:+.2f}%  "
+        f"Δ成交={profit_lock_compare['delta']['total_trade_count']:+}"
+    )
+
     result_path = os.path.join(ALPHA_LAB_PATH, "livermore_result_40k.json")
     with open(result_path, "w") as f:
         json.dump(
@@ -558,11 +701,14 @@ def main() -> None:
                     "trail_activate": TRAIL_ACTIVATE_PCT,
                     "trail_pullback": TRAIL_PULLBACK_PCT,
                     "add_spacing_grid": ADD_SPACING_GRID,
+                    "profit_lock_arm": PROFIT_LOCK_ARM_PCT,
+                    "profit_lock_exit": PROFIT_LOCK_EXIT_PCT,
                 },
                 "baseline_A_equal_weight": pick_stats(stats_a),
                 "baseline_B_trail": pick_stats(stats_b),
                 "livermore_grid": liver_rows,
                 "best_by_sharpe": best,
+                "profit_lock_compare": profit_lock_compare,
             },
             f,
             indent=2,
