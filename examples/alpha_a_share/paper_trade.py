@@ -279,6 +279,181 @@ def list_sim_session_choices(account: str, limit: int = 30) -> list[tuple[str, s
     return out
 
 
+@dataclass
+class RoundStats:
+    """本轮练习统计：自上次重置起，卖出平仓算一笔。"""
+
+    since_label: str
+    closed: int = 0
+    wins: int = 0
+    losses: int = 0
+    breakeven: int = 0
+    avg_win: float = 0.0
+    avg_loss: float = 0.0  # 正数：平均单笔亏损金额
+    payoff: float | None = None  # 平均盈 / 平均亏
+    total_realized: float = 0.0
+    open_symbols: int = 0
+
+    @property
+    def win_rate(self) -> float | None:
+        decided = self.wins + self.losses
+        if decided <= 0:
+            return None
+        return self.wins / decided
+
+    @property
+    def summary(self) -> str:
+        wr = f"{self.win_rate * 100:.1f}%" if self.win_rate is not None else "n/a"
+        if self.payoff is None:
+            pay = "n/a（无亏损笔）" if self.wins and not self.losses else "n/a"
+        else:
+            pay = f"{self.payoff:.2f}"
+        return (
+            f"【本轮练习统计】自 {self.since_label}（重置起算）\n"
+            f"已平仓={self.closed} 笔  胜={self.wins}  负={self.losses}"
+            + (f"  平={self.breakeven}" if self.breakeven else "")
+            + f"  胜率={wr}\n"
+            f"平均盈利={self.avg_win:+,.2f}  平均亏损={-self.avg_loss:,.2f}  "
+            f"盈亏比(均盈/均亏)={pay}\n"
+            f"已实现合计={self.total_realized:+,.2f}  未平仓标的={self.open_symbols}"
+        )
+
+
+def _parse_paper_trade_note(note: str) -> tuple[str, str, int, float] | None:
+    """解析『模拟买入/卖出 代码 数量@价格』→ (side, code, shares, price)。"""
+    note = (note or "").strip()
+    if "模拟买入" in note:
+        side = "buy"
+        body = note.replace("模拟买入", "", 1).strip()
+    elif "模拟卖出" in note:
+        side = "sell"
+        body = note.replace("模拟卖出", "", 1).strip()
+    else:
+        return None
+    parts = body.split()
+    if len(parts) < 2 or "@" not in parts[1]:
+        return None
+    code = parts[0]
+    sh_s, _, px_s = parts[1].partition("@")
+    try:
+        shares = int(float(sh_s))
+        price = float(px_s)
+    except ValueError:
+        return None
+    if shares <= 0 or price <= 0:
+        return None
+    return side, code, shares, price
+
+
+def _snap_share_map(row: dict) -> dict[str, tuple[int, float]]:
+    out: dict[str, tuple[int, float]] = {}
+    for vt, pos in (row.get("positions") or {}).items():
+        sh = int(pos.get("shares") or 0)
+        if sh <= 0:
+            continue
+        out[vt] = (sh, float(pos.get("cost") or 0))
+    return out
+
+
+def compute_round_stats(account: str) -> RoundStats:
+    """
+    自最近一次 paper_trade_reset 起：
+    - 某标的从有仓到清仓算一笔已平仓
+    - 盈亏比 = 平均盈利金额 / 平均亏损金额
+    """
+    from account_equity import close_on_or_before
+
+    acc = ensure_sim_account_name(account)
+    _, hist_path = resolve_paths(acc)
+    rows = list_history(path=hist_path)
+    if not rows:
+        return RoundStats(since_label="（暂无流水）")
+
+    reset_i: int | None = None
+    since_label = "账户起始"
+    for i, r in enumerate(rows):
+        src = r.get("source") or ""
+        note = r.get("note") or ""
+        if src == "paper_trade_reset" or "重置练习账户" in note:
+            reset_i = i
+            since_label = (r.get("saved_at") or r.get("updated") or "最近重置").strip()
+
+    if reset_i is not None:
+        prev_map = _snap_share_map(rows[reset_i])
+        segment = rows[reset_i + 1 :]
+    else:
+        prev_map = {}
+        segment = rows
+
+    # vt -> shares, cost, accrued_realized in current open round
+    open_lots: dict[str, tuple[int, float, float]] = {}
+    closed_pnls: list[float] = []
+
+    for r in segment:
+        cur_map = _snap_share_map(r)
+        parsed = _parse_paper_trade_note(r.get("note") or "")
+        trade_code = parsed[1] if parsed else ""
+        trade_side = parsed[0] if parsed else ""
+        trade_px = parsed[3] if parsed else 0.0
+
+        for vt in set(prev_map) | set(cur_map):
+            old_sh, old_cost = prev_map.get(vt, (0, 0.0))
+            new_sh, new_cost = cur_map.get(vt, (0, 0.0))
+            if new_sh == old_sh:
+                if new_sh > 0:
+                    acc_r = open_lots.get(vt, (0, 0.0, 0.0))[2]
+                    open_lots[vt] = (new_sh, new_cost, acc_r)
+                continue
+
+            code_key = vt.split(".", 1)[0]
+            use_note = bool(parsed and trade_code == code_key)
+
+            if new_sh > old_sh:
+                if old_sh <= 0:
+                    px = trade_px if use_note and trade_side == "buy" else new_cost
+                    open_lots[vt] = (new_sh, float(px), 0.0)
+                else:
+                    _, _, acc_r = open_lots.get(vt, (old_sh, old_cost, 0.0))
+                    open_lots[vt] = (new_sh, new_cost, acc_r)
+            else:
+                sold = old_sh - new_sh
+                _, lot_cost, acc_r = open_lots.get(vt, (old_sh, old_cost, 0.0))
+                if use_note and trade_side == "sell":
+                    px = trade_px
+                else:
+                    u = (r.get("updated") or "").strip()
+                    close_px, _ = close_on_or_before(vt, u) if u else (None, None)
+                    px = float(close_px) if close_px else lot_cost
+                acc_r += (px - lot_cost) * sold
+                if new_sh <= 0:
+                    closed_pnls.append(acc_r)
+                    open_lots.pop(vt, None)
+                else:
+                    open_lots[vt] = (new_sh, lot_cost, acc_r)
+
+        prev_map = cur_map
+
+    wins = [p for p in closed_pnls if p > 1e-9]
+    losses = [p for p in closed_pnls if p < -1e-9]
+    be = len(closed_pnls) - len(wins) - len(losses)
+    avg_win = sum(wins) / len(wins) if wins else 0.0
+    avg_loss = (-sum(losses) / len(losses)) if losses else 0.0
+    payoff = (avg_win / avg_loss) if losses and avg_loss > 1e-9 else None
+
+    return RoundStats(
+        since_label=since_label or "账户起始",
+        closed=len(closed_pnls),
+        wins=len(wins),
+        losses=len(losses),
+        breakeven=be,
+        avg_win=avg_win,
+        avg_loss=avg_loss,
+        payoff=payoff,
+        total_realized=sum(closed_pnls),
+        open_symbols=len(open_lots),
+    )
+
+
 def resolve_vt_symbol(raw: str) -> str:
     """解析代码为 vt_symbol；池外若本地已有日线也可。"""
     s = raw.strip().upper()

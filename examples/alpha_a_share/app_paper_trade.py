@@ -35,6 +35,7 @@ from livermore_positions_store import list_history, load_positions, resolve_path
 from paper_trade import (
     SIM_PREFIX,
     check_order,
+    compute_round_stats,
     create_sim_account,
     execute_order,
     list_sim_accounts,
@@ -680,10 +681,20 @@ def _positions_table(account: str, asof: str) -> tuple[list[list], str]:
     return rows, pos_line
 
 
+def _round_stats_text(account: str) -> str:
+    if not account:
+        return "请选择模拟账户"
+    try:
+        return compute_round_stats(account).summary
+    except Exception as e:
+        return f"本轮统计失败: {e}"
+
+
 def _refresh_positions(account: str, asof: str):
     rows, pos_line = _positions_table(account, asof)
     fig, period = _equity_analysis(account, asof)
-    summary = f"{period}\n{pos_line}"
+    stats = _round_stats_text(account)
+    summary = f"{period}\n{pos_line}\n\n{stats}"
     return rows, summary, fig
 
 
@@ -914,10 +925,10 @@ def build_app() -> gr.Blocks:
                 pos_asof = gr.Textbox(label="估值日（当前模拟时间）", value=date.today().isoformat())
                 pos_refresh = gr.Button("刷新分析", scale=0)
             pos_summary = gr.Textbox(
-                label="区间汇总 + 期末持仓",
+                label="区间汇总 + 期末持仓 + 本轮练习统计",
                 interactive=False,
-                lines=8,
-                max_lines=12,
+                lines=12,
+                max_lines=16,
             )
             equity_plot = gr.Plot(label="权益曲线（现金+市值；回撤按此计算）")
             pos_table = gr.Dataframe(
@@ -929,6 +940,12 @@ def build_app() -> gr.Blocks:
         with gr.Tab("历史"):
             with gr.Row():
                 hist_account = gr.Dropdown(choices=list_sim_accounts(), label="模拟账户")
+            hist_round_stats = gr.Textbox(
+                label="本轮练习统计（重置起算；卖出平仓算一笔）",
+                interactive=False,
+                lines=4,
+                max_lines=6,
+            )
             with gr.Tab("流水"):
                 with gr.Row():
                     hist_date = gr.Textbox(label="筛选交易日（可空）", placeholder="YYYY-MM-DD")
@@ -1004,6 +1021,10 @@ def build_app() -> gr.Blocks:
             _on_hist_account,
             inputs=[account_dd],
             outputs=[session_pick],
+        ).then(
+            _round_stats_text,
+            inputs=[account_dd],
+            outputs=[hist_round_stats],
         )
 
         # 交易日联动保存估值日
@@ -1071,10 +1092,11 @@ def build_app() -> gr.Blocks:
             msg = _submit_order(*args)
             rows, summary, fig = _refresh_positions(args[0], args[6])
             hist = _history_table(args[0], "", 50)
+            stats = _round_stats_text(args[0])
             chk = _evaluate_order(
                 args[0], args[1], args[2], args[3], args[4], args[5], args[6], args[7]
             )
-            return msg, rows, summary, fig, hist, chk
+            return msg, rows, summary, fig, hist, stats, chk
 
         submit_btn.click(
             _after_order,
@@ -1095,6 +1117,7 @@ def build_app() -> gr.Blocks:
                 pos_summary,
                 equity_plot,
                 hist_table,
+                hist_round_stats,
                 order_check,
             ],
         )
@@ -1118,11 +1141,19 @@ def build_app() -> gr.Blocks:
             _history_table,
             inputs=[hist_account, hist_date, hist_limit],
             outputs=[hist_table],
+        ).then(
+            _round_stats_text,
+            inputs=[hist_account],
+            outputs=[hist_round_stats],
         )
         hist_account.change(
             _history_table,
             inputs=[hist_account, hist_date, hist_limit],
             outputs=[hist_table],
+        ).then(
+            _round_stats_text,
+            inputs=[hist_account],
+            outputs=[hist_round_stats],
         ).then(
             _on_hist_account,
             inputs=[hist_account],
