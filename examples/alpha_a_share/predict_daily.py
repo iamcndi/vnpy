@@ -9,8 +9,10 @@
       + 利弗莫尔建仓 / 管仓动作（读 alpha_data/livermore_positions.json）
       alpha_data/signal/ 下保存预测信号
 
-持仓：编辑 livermore_positions.json（参考同目录 .example.json）；
-      下单后自行更新 shares / cost / high / last_buy / stage / halved / cash。
+持仓：
+  - 当前快照：alpha_data/livermore_positions.json（每日预测读取）
+  - 历史流水：alpha_data/livermore_positions_history.jsonl（复盘用，只追加不覆盖）
+  更新后运行 snapshot_positions.py 记入历史；参考 livermore_positions.example.json
 """
 
 import os
@@ -32,8 +34,15 @@ from vnpy.alpha.dataset.datasets.alpha_158 import Alpha158
 from vnpy.alpha.dataset import Segment
 from vnpy.trader.constant import Interval
 
+from a_share_limits import a_share_daily_limit_up_pct, is_a_share_limit_up
 from datafeed import download_daily_data
 from stock_universe import STOCK_LIST
+from livermore_positions_store import (
+    all_prediction_accounts,
+    load_positions,
+    resolve_paths,
+    save_positions,
+)
 from horizons import (
     FORECAST_HORIZONS,
     PRIMARY_HORIZON,
@@ -46,7 +55,6 @@ ALPHA_LAB_PATH = os.path.join(PROJECT_DIR, "alpha_data")
 LOOKBACK_DAYS = 90
 BASE_LONG_TOP_N_RATIO = 1.0 / 3.0
 OPTIMIZED_CONFIG_PATH = os.path.join(ALPHA_LAB_PATH, "optimized_config.json")
-POSITIONS_PATH = os.path.join(ALPHA_LAB_PATH, "livermore_positions.json")
 
 PREDICTION_WINDOW_DAYS = 30
 DISPLAY_TOP_N = 5
@@ -60,7 +68,12 @@ PYRAMID_FRACTIONS = (0.60, 0.40)
 STOP_LOSS_PCT = 0.07
 TRAIL_ACTIVATE_PCT = 0.15
 TRAIL_PULLBACK_PCT = 0.08
+# 早期盈利区：峰值浮盈 ∈ [+3%, +15%) 时，吐回峰值利润 70% → 清仓（一年回测最优夏普对照）
+EARLY_ZONE_ARM_PCT = 0.03
+EARLY_ZONE_GIVEBACK_PCT = 0.70
 MIN_LOT = 100
+# 盘中追高上限：触发价之上最多追 1%（开仓 / 加仓共用）
+INTRADAY_MAX_CHASE_PCT = 0.01
 
 
 def _stock_name(vt_symbol: str) -> str:
@@ -82,6 +95,18 @@ def is_n_day_breakout(closes: list[float], n: int = BREAKOUT_WINDOW) -> bool:
         return False
     window = closes[-n:]
     return window[-1] >= max(window) - 1e-12
+
+
+def breakout_trigger_price(closes: list[float], n: int = BREAKOUT_WINDOW) -> float | None:
+    """
+    盘中开仓触发价：现价需 ≥ 该价，才使「以现价替换最新一根收盘」后创近 n 日新高。
+    无分钟线时仍用日线序列；现价由日线收盘或盘中 --price 提供。
+    """
+    if len(closes) < 2:
+        return None
+    if len(closes) < n:
+        return max(closes[:-1])
+    return max(closes[-n:-1])
 
 
 def load_recent_closes(
@@ -111,27 +136,43 @@ def load_latest_bar_prices(
     return close, high
 
 
+def load_latest_quote(
+    lab: AlphaLab, vt_symbol: str
+) -> tuple[datetime | None, float | None, datetime | None]:
+    """本地日线最后一根: (K线日期, 收盘价, parquet 文件更新时间)。"""
+    path = lab.daily_path / f"{vt_symbol}.parquet"
+    if not path.exists():
+        return None, None, None
+    mtime = datetime.fromtimestamp(path.stat().st_mtime)
+    df = pl.read_parquet(path, columns=["datetime", "close"])
+    if df.is_empty():
+        return None, None, mtime
+    last = df.tail(1).row(0, named=True)
+    close = last["close"]
+    if close is None or (isinstance(close, float) and (close <= 0 or np.isnan(close))):
+        close = None
+    return last["datetime"], close, mtime
+
+
+def _fmt_quote(
+    bar_dt: datetime | None, close: float | None, mtime: datetime | None
+) -> tuple[str, str]:
+    px = f"{close:.2f}" if close is not None else "n/a"
+    if bar_dt is None and mtime is None:
+        return px, "n/a"
+    if bar_dt is None:
+        return px, mtime.strftime("%Y-%m-%d %H:%M")
+    bar_d = bar_dt.strftime("%Y-%m-%d")
+    if mtime is None:
+        return px, bar_d
+    if mtime.date() == bar_dt.date():
+        return px, f"{bar_d} {mtime.strftime('%H:%M')}"
+    return px, f"{bar_d} (拉取 {mtime.strftime('%m-%d %H:%M')})"
+
+
 def round_lot(shares: float | int, lot: int = MIN_LOT) -> int:
     s = int(shares)
     return s - (s % lot) if s >= lot else 0
-
-
-def load_positions(path: str = POSITIONS_PATH) -> dict:
-    """读取持仓 JSON；文件不存在则返回空仓模板。"""
-    default: dict = {"updated": "", "cash": 0.0, "positions": {}}
-    p = Path(path)
-    if not p.exists():
-        return default
-    try:
-        with open(p, encoding="utf-8") as f:
-            data = json.load(f)
-    except (OSError, json.JSONDecodeError) as e:
-        print(f"  ⚠ 读取持仓失败: {e}，按空仓处理")
-        return default
-    data.setdefault("cash", 0.0)
-    data.setdefault("positions", {})
-    data.setdefault("updated", "")
-    return data
 
 
 def suggest_target_shares(stock_budget: float, stage: int, price: float) -> int:
@@ -169,7 +210,20 @@ def evaluate_held_action(
             {"shares": 0, "halved": False, "stage": 0},
         )
 
-    trail_armed = (peak - cost) / cost >= TRAIL_ACTIVATE_PCT
+    peak_pnl = (peak - cost) / cost
+    # 早期盈利区 (+3%~+15%)：吐回峰值利润 70% → 清仓（未达移动止盈激活线）
+    if EARLY_ZONE_ARM_PCT <= peak_pnl < TRAIL_ACTIVATE_PCT and peak > cost:
+        given = (peak - price) / (peak - cost)
+        if given >= EARLY_ZONE_GIVEBACK_PCT:
+            return (
+                "清仓",
+                f"早期盈利区：峰值浮盈 {peak_pnl * 100:+.1f}% "
+                f"∈ [{EARLY_ZONE_ARM_PCT * 100:.0f}%, {TRAIL_ACTIVATE_PCT * 100:.0f}%)，"
+                f"吐回利润 {given * 100:.1f}% ≥ {EARLY_ZONE_GIVEBACK_PCT:.0%}",
+                {"shares": 0, "halved": False, "high": peak},
+            )
+
+    trail_armed = peak_pnl >= TRAIL_ACTIVATE_PCT
     if trail_armed and peak > 0:
         pullback = (peak - price) / peak
         if pullback >= TRAIL_PULLBACK_PCT:
@@ -210,6 +264,87 @@ def evaluate_held_action(
     if not in_candidates:
         note += " | 已掉出Top5(不强制卖)"
     return "持有", note, hint
+
+
+def compute_price_levels(
+    pos: dict,
+    price: float,
+    *,
+    in_candidates: bool,
+) -> list[tuple[str, float, str]]:
+    """
+    管仓关键价位：(动作, 触发价, 说明)。
+    顺序：止损 → 加仓 → 减仓（早期区 / 移动止盈）。
+    """
+    shares = int(pos.get("shares", 0) or 0)
+    cost = float(pos.get("cost", 0) or 0)
+    high = float(pos.get("high", 0) or 0)
+    last_buy = float(pos.get("last_buy", cost) or cost)
+    stage = int(pos.get("stage", 1) or 1)
+    halved = bool(pos.get("halved", False))
+
+    if shares <= 0 or cost <= 0 or price <= 0:
+        return []
+
+    peak = max(high, price)
+    peak_pnl = (peak - cost) / cost
+    levels: list[tuple[str, float, str]] = []
+
+    stop_px = cost * (1.0 - STOP_LOSS_PCT)
+    levels.append(("止损", stop_px, f"收盘≤{stop_px:.2f} 清仓"))
+
+    if not halved and stage < len(PYRAMID_FRACTIONS) and last_buy > 0:
+        add_px = last_buy * (1.0 + ADD_SPACING_PCT)
+        top5 = f"且仍在Top{LIVERMORE_TOP_N}" if in_candidates else f"(已掉出Top{LIVERMORE_TOP_N}不加仓)"
+        levels.append(("加仓", add_px, f"收盘≥{add_px:.2f} {top5}"))
+
+    early_arm = cost * (1.0 + EARLY_ZONE_ARM_PCT)
+    trail_arm = cost * (1.0 + TRAIL_ACTIVATE_PCT)
+    if peak > 0:
+        if peak_pnl >= TRAIL_ACTIVATE_PCT:
+            reduce_px = peak * (1.0 - TRAIL_PULLBACK_PCT)
+            action = "清仓" if halved else "减半"
+            levels.append(
+                (
+                    action,
+                    reduce_px,
+                    f"移动止盈：高点{peak:.2f} 回撤{TRAIL_PULLBACK_PCT:.0%}→收盘≤{reduce_px:.2f}",
+                )
+            )
+        elif peak_pnl >= EARLY_ZONE_ARM_PCT and peak > cost:
+            reduce_px = peak - (peak - cost) * EARLY_ZONE_GIVEBACK_PCT
+            levels.append(
+                (
+                    "清仓",
+                    reduce_px,
+                    f"早期区：峰值{peak_pnl * 100:+.1f}% 吐回利润{EARLY_ZONE_GIVEBACK_PCT:.0%}"
+                    f"→收盘≤{reduce_px:.2f}",
+                )
+            )
+        else:
+            levels.append(("参考", early_arm, f"峰值≥{early_arm:.2f} 进入早期区监控"))
+            levels.append(("参考", trail_arm, f"峰值≥{trail_arm:.2f} 激活移动止盈"))
+
+    return levels
+
+
+def format_price_levels(
+    levels: list[tuple[str, float, str]],
+    price: float,
+) -> str:
+    """格式化价位一行；已达/已触发的项前加 *。"""
+    if not levels:
+        return ""
+    parts: list[str] = []
+    for action, px, note in levels:
+        triggered = False
+        if action == "加仓" and price >= px - 1e-9:
+            triggered = True
+        elif action in ("止损", "减半", "清仓") and price <= px + 1e-9:
+            triggered = True
+        mark = "*" if triggered else ""
+        parts.append(f"{mark}{action} {note}")
+    return "  价位: " + " | ".join(parts)
 
 
 def build_df(lab: AlphaLab, vt_symbols: list[str]) -> pl.DataFrame:
@@ -280,13 +415,35 @@ def load_optimized_config() -> dict:
         print(f"  ✓ 加载优化配置 (选股比率={config['optimized_params']['long_top_n_ratio']:.2f}, "
               f"置信度={config['optimized_params']['confidence_scale']:.2f}x)")
 
-        if config["model_status"].get("retrain_needed", False):
-            print("  ⚠ 模型需要重训练！运行 run_ml.py 重新训练")
-
         return config
     except Exception as e:
         print(f"  ⚠ 加载优化配置失败: {e}，使用默认参数")
         return default
+
+
+def should_warn_retrain(config: dict) -> bool:
+    """仅在优化配置判定需要重训、且并非刚训练当天时提示。"""
+    if not config.get("model_status", {}).get("retrain_needed", False):
+        return False
+    days = (config.get("retraining_schedule") or {}).get("days_since_last_train")
+    if days is not None and int(days) <= 0:
+        return False
+    return True
+
+
+def print_retrain_warning(config: dict) -> None:
+    if not should_warn_retrain(config):
+        return
+    schedule = config.get("retraining_schedule") or {}
+    reason = schedule.get("retrain_reason") or "评估指标建议重训"
+    days = schedule.get("days_since_last_train")
+    print("\n" + "=" * 60)
+    print("  ⚠ 模型建议重训练")
+    if days is not None:
+        print(f"  距上次训练: {days} 天")
+    print(f"  原因: {reason}")
+    print("  请运行: 菜单 2→1  或  examples/alpha_a_share/run_ml.py")
+    print("=" * 60)
 
 
 def load_horizon_models(lab: AlphaLab) -> dict[int, object]:
@@ -316,7 +473,14 @@ def load_horizon_models(lab: AlphaLab) -> dict[int, object]:
     return models
 
 
-def _print_rank_row(rank: int, row: dict, n_long: int, n_total: int, horizons: list[int]) -> None:
+def _print_rank_row(
+    rank: int,
+    row: dict,
+    n_long: int,
+    n_total: int,
+    horizons: list[int],
+    quote_cache: dict[str, tuple[datetime | None, float | None, datetime | None]],
+) -> None:
     vt = row["vt_symbol"]
     sig = row["signal"]
     if rank <= n_long:
@@ -327,10 +491,217 @@ def _print_rank_row(rank: int, row: dict, n_long: int, n_total: int, horizons: l
         action = "HOLD "
 
     cols = "  ".join(_fmt_ret(row.get(f"ret_{d}d")) for d in horizons)
-    print(f"  {rank:>4d}  {vt:>12s}  {_stock_name(vt):>8s}  {cols}  {sig:>6.3f}  {action}")
+    px, ts = _fmt_quote(*quote_cache.get(vt, (None, None, None)))
+    print(
+        f"  {rank:>4d}  {vt:>12s}  {_stock_name(vt):>8s}  {cols}  {sig:>6.3f}  {action}"
+        f"  {px:>7s}  {ts}"
+    )
 
 
-def predict(lab: AlphaLab, vt_symbols: list[str], opt_config: dict) -> None:
+def _account_label(account: str | None) -> str:
+    return account or "默认"
+
+
+def _print_livermore_for_account(
+    *,
+    account: str | None,
+    book: dict,
+    lab: AlphaLab,
+    latest_date: datetime,
+    top_candidates: pl.DataFrame,
+    candidate_set: set[str],
+    price_cache: dict[str, tuple[float | None, float | None]],
+) -> None:
+    """单账户利弗莫尔建仓 / 管仓输出。"""
+    positions_path, history_path = resolve_paths(account)
+    held: dict[str, dict] = {
+        vt: dict(p)
+        for vt, p in (book.get("positions") or {}).items()
+        if int((p or {}).get("shares", 0) or 0) > 0
+    }
+
+    entry_rows: list[dict] = []
+    limit_up_rows: list[dict] = []
+    watch_rows: list[dict] = []
+    for row in top_candidates.iter_rows(named=True):
+        vt = row["vt_symbol"]
+        # 多取 1 根，用于昨收判定涨停
+        closes_ext = load_recent_closes(lab, vt, latest_date, BREAKOUT_WINDOW + 1)
+        closes = (
+            closes_ext[-BREAKOUT_WINDOW:]
+            if len(closes_ext) >= BREAKOUT_WINDOW
+            else closes_ext
+        )
+        breakout = is_n_day_breakout(closes, BREAKOUT_WINDOW)
+        trigger = breakout_trigger_price(closes, BREAKOUT_WINDOW)
+        close = closes[-1] if closes else None
+        pre_close = closes_ext[-2] if len(closes_ext) >= 2 else None
+        at_limit = bool(
+            close is not None
+            and pre_close is not None
+            and is_a_share_limit_up(vt, close, pre_close)
+        )
+        enriched = {
+            **row,
+            "close": close,
+            "breakout": breakout,
+            "closes_n": len(closes),
+            "entry_trigger": trigger,
+            "limit_up": at_limit,
+        }
+        if vt in held:
+            watch_rows.append({**enriched, "held": True})
+        elif breakout and at_limit:
+            limit_up_rows.append(enriched)
+        elif breakout:
+            entry_rows.append(enriched)
+        else:
+            watch_rows.append(enriched)
+
+    equity = float(book.get("cash", 0) or 0)
+    for vt, pos in held.items():
+        px, _ = price_cache.get(vt, (None, None))
+        if px:
+            equity += int(pos.get("shares", 0) or 0) * px
+    stock_budget = equity / LIVERMORE_TOP_N if equity > 0 else 0.0
+
+    acct = _account_label(account)
+    print(
+        f"  利弗莫尔（Top{LIVERMORE_TOP_N} / N={BREAKOUT_WINDOW} / X={ADD_SPACING_PCT:.0%} "
+        f"/ 金字塔={list(PYRAMID_FRACTIONS)}）— 账户: {acct}"
+    )
+    print(
+        f"  持仓文件: {positions_path}"
+        f"  | cash={book.get('cash', 0)}  持仓数={len(held)}  "
+        f"权益约={equity:,.0f}  单股预算约={stock_budget:,.0f}"
+    )
+    print(f"  历史流水: {history_path}  （复盘用，见 snapshot_positions.py --list）")
+    if not book.get("updated") and not held:
+        print("  提示: 空仓模板已就绪，成交后按 example 填写 positions")
+
+    print(f"  —— 突破建仓 ({len(entry_rows)} 只) ——")
+    if entry_rows:
+        for row in entry_rows:
+            detail = " / ".join(
+                f"{d}日 {_fmt_ret(row.get(f'ret_{d}d')).strip()}"
+                for d in FORECAST_HORIZONS
+            )
+            close = row.get("close")
+            close_s = f"{close:.2f}" if close is not None else "n/a"
+            tgt = suggest_target_shares(stock_budget, 1, close) if close else 0
+            print(
+                f"    建仓  {row['vt_symbol']} ({_stock_name(row['vt_symbol'])})  "
+                f"收盘={close_s}  建议约{tgt}股(60%档)  →  {detail}"
+            )
+    else:
+        print("    （今日无新突破建仓）")
+
+    print(f"  —— 涨停观望 / 暂不可买 ({len(limit_up_rows)} 只) ——")
+    if limit_up_rows:
+        print("     突破信号有效，但收盘涨停难成交，不建议追板；开板后再评估")
+        for row in limit_up_rows:
+            detail = " / ".join(
+                f"{d}日 {_fmt_ret(row.get(f'ret_{d}d')).strip()}"
+                for d in FORECAST_HORIZONS
+            )
+            close = row.get("close")
+            close_s = f"{close:.2f}" if close is not None else "n/a"
+            print(
+                f"    涨停  {row['vt_symbol']} ({_stock_name(row['vt_symbol'])})  "
+                f"收盘={close_s}  →  {detail}"
+            )
+    else:
+        print("    （无）")
+
+    watch_only = [r for r in watch_rows if not r.get("held")]
+    print(f"  —— 候选观望 ({len(watch_only)} 只) ——")
+    print(
+        f"     盘中开仓: 现价≥20日高点触发；限价 [触发, 触发×{1 + INTRADAY_MAX_CHASE_PCT:.0%}]；"
+        f"首仓约60%预算 | 无分钟线时现价=最新日线收盘，盘中请手填价"
+    )
+    for row in watch_only:
+        detail = " / ".join(
+            f"{d}日 {_fmt_ret(row.get(f'ret_{d}d')).strip()}"
+            for d in FORECAST_HORIZONS
+        )
+        close = row.get("close")
+        trigger = row.get("entry_trigger")
+        print(f"    观望  {row['vt_symbol']} ({_stock_name(row['vt_symbol'])})  →  {detail}")
+        if trigger is None or close is None or close <= 0:
+            continue
+        max_chase = trigger * (1.0 + INTRADAY_MAX_CHASE_PCT)
+        # 建议股数按触发价估算（触及后按该价附近成交）
+        tgt = suggest_target_shares(stock_budget, 1, trigger) if stock_budget > 0 else 0
+        gap_pct = max(0.0, (trigger - close) / trigger * 100) if trigger > 0 else 0.0
+        if close >= trigger - 1e-9:
+            dist = "现价已触达，可按突破建仓"
+        else:
+            dist = f"现价={close:.2f} 还差{gap_pct:.1f}%"
+        print(
+            f"           └盘中开仓: ≥{trigger:.2f}  限价≤{max_chase:.2f}  "
+            f"建议约{tgt}股(60%)  {dist}"
+        )
+
+    print(f"  —— 持仓管仓 ({len(held)} 只) ——")
+    high_updates: list[tuple[str, float, float]] = []
+    if held:
+        for vt, pos in held.items():
+            close, bar_high = price_cache.get(vt, (None, None))
+            if close is None:
+                print(f"    跳过  {vt} ({_stock_name(vt)})  无最新行情")
+                continue
+            action, note, hint = evaluate_held_action(
+                pos, close, bar_high, vt in candidate_set
+            )
+            shares = int(pos.get("shares", 0) or 0)
+            cost = float(pos.get("cost", 0) or 0)
+            extra = ""
+            if action == "加仓":
+                tgt = suggest_target_shares(stock_budget, int(hint.get("stage", 2)), close)
+                add_lots = max(0, tgt - shares)
+                extra = f"  建议加约{add_lots}股至约{tgt}股"
+            elif action == "减半":
+                extra = f"  目标剩约{hint.get('shares', 0)}股"
+            elif action in ("止损清仓", "清仓"):
+                extra = "  目标0股"
+            new_high = float(hint.get("high") or 0)
+            old_high = float(pos.get("high", 0) or 0)
+            high_raised = new_high > old_high + 1e-12
+            if high_raised:
+                pos["high"] = new_high
+                stored = (book.get("positions") or {}).get(vt)
+                if isinstance(stored, dict):
+                    stored["high"] = new_high
+                high_updates.append((vt, old_high, new_high))
+            print(
+                f"    {action}  {vt} ({_stock_name(vt)})  "
+                f"{shares}股 成本={cost:.2f} 收盘={close:.2f}  | {note}{extra}"
+            )
+            price_line = format_price_levels(
+                compute_price_levels(pos, close, in_candidates=vt in candidate_set),
+                close,
+            )
+            if price_line:
+                print(f"           └{price_line.lstrip()}")
+            if high_raised:
+                print(
+                    f"           └ 已更新 {vt} high 记录 {old_high:.2f} → {new_high:.2f}"
+                )
+        if high_updates:
+            names = "、".join(
+                f"{vt} {old:.2f}→{new:.2f}" for vt, old, new in high_updates
+            )
+            save_positions(
+                book,
+                note=f"predict_daily 刷新 high: {names}",
+                source="predict_daily",
+                path=positions_path,
+            )
+    else:
+        print("    （无持仓；有仓后写入 livermore_positions.json）")
+
+
+def predict(lab: AlphaLab, vt_symbols: list[str], opt_config: dict, *, account: str | None = None) -> None:
     """预测并输出多持有期选股信号"""
     print("构建最新因子数据集...")
     df = build_df(lab, vt_symbols)
@@ -409,63 +780,54 @@ def predict(lab: AlphaLab, vt_symbols: list[str], opt_config: dict) -> None:
         "predicted_return", descending=False
     )
 
-    # 利弗莫尔：Top5 中近 N 日收盘突破 → 建仓提示（已持仓的不再提示建仓）
-    book = load_positions()
-    held: dict[str, dict] = {
-        vt: dict(p)
-        for vt, p in (book.get("positions") or {}).items()
-        if int((p or {}).get("shares", 0) or 0) > 0
-    }
     candidate_set = {row["vt_symbol"] for row in top_candidates.iter_rows(named=True)}
+    accounts = [account] if account is not None else all_prediction_accounts()
 
-    entry_rows: list[dict] = []
-    watch_rows: list[dict] = []
-    for row in top_candidates.iter_rows(named=True):
-        vt = row["vt_symbol"]
-        closes = load_recent_closes(lab, vt, latest_date, BREAKOUT_WINDOW)
-        breakout = is_n_day_breakout(closes, BREAKOUT_WINDOW)
-        enriched = {
-            **row,
-            "close": closes[-1] if closes else None,
-            "breakout": breakout,
-            "closes_n": len(closes),
-        }
-        if vt in held:
-            watch_rows.append({**enriched, "held": True})
-        elif breakout:
-            entry_rows.append(enriched)
-        else:
-            watch_rows.append(enriched)
+    books: dict[str | None, dict] = {}
+    symbols_for_prices = set(candidate_set)
+    for acc in accounts:
+        pos_path, _ = resolve_paths(acc)
+        book = load_positions(path=pos_path)
+        books[acc] = book
+        for vt, p in (book.get("positions") or {}).items():
+            if int((p or {}).get("shares", 0) or 0) > 0:
+                symbols_for_prices.add(vt)
 
-    # 估算单股预算（用于建议股数）
-    equity = float(book.get("cash", 0) or 0)
     price_cache: dict[str, tuple[float | None, float | None]] = {}
-    for vt in set(held) | candidate_set:
+    for vt in symbols_for_prices:
         price_cache[vt] = load_latest_bar_prices(lab, vt, latest_date)
-    for vt, pos in held.items():
-        px, _ = price_cache.get(vt, (None, None))
-        if px:
-            equity += int(pos.get("shares", 0) or 0) * px
-    stock_budget = equity / LIVERMORE_TOP_N if equity > 0 else 0.0
-
-    horizon_headers = "  ".join(f"{d}日预期" for d in FORECAST_HORIZONS)
-    print(f"\n{'='*88}")
-    print(f"  多持有期选股信号 — {latest_date.strftime('%Y-%m-%d')}  (共 {n_total} 只)")
-    print(f"  排序依据: {PRIMARY_HORIZON}日预期 | 标签=今日收盘→未来N日收盘累计收益")
-    print(f"{'='*88}")
-    print(f"  {'排名':>4s}  {'股票':>12s}  {'名称':>8s}  {horizon_headers}  {'信号':>6s}  {'操作':>6s}")
-    print(f"  {'-'*4}  {'-'*12}  {'-'*8}  {'  '.join(['-'*7]*len(FORECAST_HORIZONS))}  {'-'*6}  {'-'*6}")
 
     rows = list(result.iter_rows(named=True))
     show_all = n_total <= DISPLAY_TOP_N + DISPLAY_BOTTOM_N
+    display_rows = rows if show_all else rows[:DISPLAY_TOP_N] + rows[-DISPLAY_BOTTOM_N:]
+    quote_symbols = {row["vt_symbol"] for row in display_rows}
+    quote_symbols.update(row["vt_symbol"] for row in sell_list.iter_rows(named=True))
+    quote_cache: dict[str, tuple[datetime | None, float | None, datetime | None]] = {}
+    for vt in quote_symbols:
+        quote_cache[vt] = load_latest_quote(lab, vt)
+
+    horizon_headers = "  ".join(f"{d}日预期" for d in FORECAST_HORIZONS)
+    print(f"\n{'='*108}")
+    print(f"  多持有期选股信号 — {latest_date.strftime('%Y-%m-%d')}  (共 {n_total} 只)")
+    print(f"  排序依据: {PRIMARY_HORIZON}日预期 | 标签=今日收盘→未来N日收盘累计收益")
+    print("  最新价=本地日线最后收盘；更新时间=K线日期 + parquet 拉取时刻")
+    print(f"{'='*108}")
+    print(
+        f"  {'排名':>4s}  {'股票':>12s}  {'名称':>8s}  {horizon_headers}  "
+        f"{'信号':>6s}  {'操作':>6s}  {'最新价':>7s}  更新时间"
+    )
+    print(
+        f"  {'-'*4}  {'-'*12}  {'-'*8}  {'  '.join(['-'*7]*len(FORECAST_HORIZONS))}  "
+        f"{'-'*6}  {'-'*6}  {'-'*7}  {'-'*16}"
+    )
 
     if show_all:
         for rank, row in enumerate(rows, 1):
-            _print_rank_row(rank, row, n_long, n_total, FORECAST_HORIZONS)
+            _print_rank_row(rank, row, n_long, n_total, FORECAST_HORIZONS, quote_cache)
     else:
         print(f"  —— 预测最高 Top {DISPLAY_TOP_N} ({PRIMARY_HORIZON}日) ——")
         for rank, row in enumerate(rows[:DISPLAY_TOP_N], 1):
-            _print_rank_row(rank, row, n_long, n_total, FORECAST_HORIZONS)
+            _print_rank_row(rank, row, n_long, n_total, FORECAST_HORIZONS, quote_cache)
 
         skipped = n_total - DISPLAY_TOP_N - DISPLAY_BOTTOM_N
         if skipped > 0:
@@ -473,77 +835,28 @@ def predict(lab: AlphaLab, vt_symbols: list[str], opt_config: dict) -> None:
 
         print(f"  —— 预测最低 Bottom {DISPLAY_BOTTOM_N} ({PRIMARY_HORIZON}日) ——")
         for rank, row in enumerate(rows[-DISPLAY_BOTTOM_N:], n_total - DISPLAY_BOTTOM_N + 1):
-            _print_rank_row(rank, row, n_long, n_total, FORECAST_HORIZONS)
+            _print_rank_row(rank, row, n_long, n_total, FORECAST_HORIZONS, quote_cache)
 
-    print(f"{'='*88}")
-    print(
-        f"  利弗莫尔（Top{LIVERMORE_TOP_N} / N={BREAKOUT_WINDOW} / X={ADD_SPACING_PCT:.0%} "
-        f"/ 金字塔={list(PYRAMID_FRACTIONS)}）"
-    )
-    print(
-        f"  持仓文件: {POSITIONS_PATH}"
-        f"  | cash={book.get('cash', 0)}  持仓数={len(held)}  "
-        f"权益约={equity:,.0f}  单股预算约={stock_budget:,.0f}"
-    )
-    if not book.get("updated") and not held:
-        print("  提示: 空仓模板已就绪，成交后按 example 填写 positions")
+    print(f"{'='*108}")
+    if len(accounts) > 1:
+        labels = "、".join(_account_label(a) for a in accounts)
+        print(f"  管仓账户 ({len(accounts)} 个): {labels}")
+        print(f"{'='*88}")
 
-    print(f"  —— 突破建仓 ({len(entry_rows)} 只) ——")
-    if entry_rows:
-        for row in entry_rows:
-            detail = " / ".join(
-                f"{d}日 {_fmt_ret(row.get(f'ret_{d}d')).strip()}"
-                for d in FORECAST_HORIZONS
-            )
-            close = row.get("close")
-            close_s = f"{close:.2f}" if close is not None else "n/a"
-            tgt = suggest_target_shares(stock_budget, 1, close) if close else 0
-            print(
-                f"    建仓  {row['vt_symbol']} ({_stock_name(row['vt_symbol'])})  "
-                f"收盘={close_s}  建议约{tgt}股(60%档)  →  {detail}"
-            )
-    else:
-        print("    （今日无新突破建仓）")
-
-    print(f"  —— 候选观望 ({len([r for r in watch_rows if not r.get('held')])} 只) ——")
-    for row in watch_rows:
-        if row.get("held"):
-            continue
-        detail = " / ".join(
-            f"{d}日 {_fmt_ret(row.get(f'ret_{d}d')).strip()}"
-            for d in FORECAST_HORIZONS
+    for acc in accounts:
+        if len(accounts) > 1:
+            print(f"\n{'─'*88}")
+            print(f"  【{_account_label(acc)}】")
+            print(f"{'─'*88}")
+        _print_livermore_for_account(
+            account=acc,
+            book=books[acc],
+            lab=lab,
+            latest_date=latest_date,
+            top_candidates=top_candidates,
+            candidate_set=candidate_set,
+            price_cache=price_cache,
         )
-        print(f"    观望  {row['vt_symbol']} ({_stock_name(row['vt_symbol'])})  →  {detail}")
-
-    print(f"  —— 持仓管仓 ({len(held)} 只) ——")
-    if held:
-        for vt, pos in held.items():
-            close, bar_high = price_cache.get(vt, (None, None))
-            if close is None:
-                print(f"    跳过  {vt} ({_stock_name(vt)})  无最新行情")
-                continue
-            action, note, hint = evaluate_held_action(
-                pos, close, bar_high, vt in candidate_set
-            )
-            shares = int(pos.get("shares", 0) or 0)
-            cost = float(pos.get("cost", 0) or 0)
-            extra = ""
-            if action == "加仓":
-                tgt = suggest_target_shares(stock_budget, int(hint.get("stage", 2)), close)
-                add_lots = max(0, tgt - shares)
-                extra = f"  建议加约{add_lots}股至约{tgt}股"
-            elif action == "减半":
-                extra = f"  目标剩约{hint.get('shares', 0)}股"
-            elif action in ("止损清仓", "清仓"):
-                extra = "  目标0股"
-            print(
-                f"    {action}  {vt} ({_stock_name(vt)})  "
-                f"{shares}股 成本={cost:.2f} 收盘={close:.2f}  | {note}{extra}"
-            )
-            if hint.get("high") and float(hint["high"]) > float(pos.get("high", 0) or 0):
-                print(f"           └ 建议把 high 更新为 {hint['high']:.2f}")
-    else:
-        print("    （无持仓；有仓后写入 livermore_positions.json）")
 
     print(f"\n  建议回避 Bottom{DISPLAY_BOTTOM_N}（非利弗莫尔强制卖出）:")
     for row in sell_list.iter_rows(named=True):
@@ -551,7 +864,11 @@ def predict(lab: AlphaLab, vt_symbols: list[str], opt_config: dict) -> None:
             f"{d}日 {_fmt_ret(row.get(f'ret_{d}d')).strip()}"
             for d in FORECAST_HORIZONS
         )
-        print(f"    {row['vt_symbol']} ({_stock_name(row['vt_symbol'])})  →  {detail}")
+        px, ts = _fmt_quote(*quote_cache.get(row["vt_symbol"], (None, None, None)))
+        print(
+            f"    {row['vt_symbol']} ({_stock_name(row['vt_symbol'])})  "
+            f"最新价={px}  {ts}  →  {detail}"
+        )
 
     save_cols = ["datetime", "vt_symbol", "predicted_return", "signal"]
     for days in FORECAST_HORIZONS:
@@ -562,21 +879,37 @@ def predict(lab: AlphaLab, vt_symbols: list[str], opt_config: dict) -> None:
     signal_save = result.select(save_cols)
     lab.save_signal(f"lgb_pred_{latest_date.strftime('%Y%m%d')}", signal_save)
     print("\n  信号已保存至 AlphaLab")
-    print(
-        "\n  下单后请手动改 livermore_positions.json："
-        "shares/cost/high/last_buy/stage/halved/cash"
-    )
+    print("\n  下单后更新持仓并记入历史：")
+    for acc in accounts:
+        acct_hint = f" --account {acc}" if acc else ""
+        label = _account_label(acc)
+        print(
+            f"    [{label}] .venv/bin/python examples/alpha_a_share/snapshot_positions.py"
+            f"{acct_hint} --note \"说明\""
+        )
     print(f"{'='*88}")
 
 
 def main() -> None:
+    import argparse
+
+    parser = argparse.ArgumentParser(description="LightGBM 每日选股预测 + 利弗莫尔管仓")
+    parser.add_argument(
+        "--account",
+        default=None,
+        help="仅输出指定账户管仓（默认：全部账户统一列出）",
+    )
+    args = parser.parse_args()
+
     print("=" * 60)
     print("  LightGBM 每日选股预测 (多持有期 + 利弗莫尔管仓)")
+    if args.account:
+        print(f"  账户: {args.account}")
+    else:
+        print("  账户: 全部")
     print("=" * 60)
 
     opt_config = load_optimized_config()
-    if opt_config["model_status"].get("retrain_needed", False):
-        print("  ⚠ 建议尽快重训练模型")
 
     lab = AlphaLab(ALPHA_LAB_PATH)
     vt_symbols = [f"{code}.{exch}" for code, exch, _ in STOCK_LIST]
@@ -584,7 +917,8 @@ def main() -> None:
     print("检查并更新最新行情数据...")
     download_daily_data(lab, STOCK_LIST)
 
-    predict(lab, vt_symbols, opt_config)
+    predict(lab, vt_symbols, opt_config, account=args.account)
+    print_retrain_warning(opt_config)
 
 
 if __name__ == "__main__":

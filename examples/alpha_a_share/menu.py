@@ -19,9 +19,11 @@ EXAMPLE_JSON = PROJECT_DIR / "alpha_data" / "livermore_positions.example.json"
 
 sys.path.insert(0, str(EXAMPLE_DIR))
 from livermore_positions_store import (  # noqa: E402
+    SIM_PREFIX,
     create_account,
     delete_account,
-    list_accounts,
+    is_sim_account,
+    list_live_accounts,
     normalize_account,
     rename_account,
     resolve_paths,
@@ -150,13 +152,16 @@ def action_create_account() -> None:
         print("  已取消")
         return
     try:
-        normalize_account(name)
+        acc = normalize_account(name)
     except ValueError as e:
         print(f"  无效账户名: {e}")
         return
+    if acc and acc.startswith(SIM_PREFIX):
+        print(f"  「{SIM_PREFIX}」练习账户请在「模拟操盘 Web」中创建，不在此菜单创建")
+        return
 
     overwrite = False
-    if name in list_accounts():
+    if name in list_live_accounts():
         if not read_yes_no(f"账户「{name}」已存在，是否重置为空仓?", default=False):
             print("  已取消")
             return
@@ -186,15 +191,15 @@ def action_create_account() -> None:
 
 
 def action_delete_account() -> None:
-    rows = list_accounts()
+    rows = list_live_accounts()
     if not rows:
-        print("  （暂无命名账户可删）")
+        print("  （暂无实盘命名账户可删；练习账户请在模拟操盘中管理）")
         return
 
-    print("  已有命名账户:")
+    print("  已有实盘命名账户:")
     for i, name in enumerate(rows, 1):
         print(f"    {i}. {name}")
-    print("  （默认账本不在此列，需手动删 alpha_data/livermore_positions*.json）")
+    print("  （默认账本不在此列；练习「模拟_」账户不在此列）")
 
     name = read_line("要删除的账户名")
     if not name:
@@ -204,6 +209,9 @@ def action_delete_account() -> None:
         acc = normalize_account(name)
     except ValueError as e:
         print(f"  无效账户名: {e}")
+        return
+    if is_sim_account(acc):
+        print("  练习账户请在「模拟操盘 Web」中管理，不在此删除")
         return
     if acc is None or acc not in rows:
         print(f"  未找到账户「{name}」")
@@ -231,15 +239,15 @@ def action_delete_account() -> None:
 
 
 def action_rename_account() -> None:
-    rows = list_accounts()
+    rows = list_live_accounts()
     if not rows:
-        print("  （暂无命名账户可改名）")
+        print("  （暂无实盘命名账户可改名）")
         return
 
-    print("  已有命名账户:")
+    print("  已有实盘命名账户:")
     for i, name in enumerate(rows, 1):
         print(f"    {i}. {name}")
-    print("  （默认账本不支持改名）")
+    print("  （默认账本不支持改名；练习账户不在此列）")
 
     old = read_line("当前账户名")
     if not old:
@@ -249,6 +257,9 @@ def action_rename_account() -> None:
         old_acc = normalize_account(old)
     except ValueError as e:
         print(f"  无效账户名: {e}")
+        return
+    if is_sim_account(old_acc):
+        print("  练习账户请在「模拟操盘 Web」中管理")
         return
     if old_acc is None or old_acc not in rows:
         print(f"  未找到账户「{old}」")
@@ -265,6 +276,9 @@ def action_rename_account() -> None:
         return
     if new_acc is None:
         print("  新账户名不能为空")
+        return
+    if is_sim_account(new_acc):
+        print(f"  不可改名为「{SIM_PREFIX}」练习账户前缀")
         return
     if new_acc == old_acc:
         print("  新旧名称相同，已取消")
@@ -292,9 +306,11 @@ def action_rename_account() -> None:
 
 def action_list_accounts() -> None:
     run_script("snapshot_positions.py", "--list-accounts")
-    rows = list_accounts()
+    rows = list_live_accounts()
     if not rows:
-        print("\n  （暂无命名账户；可用菜单「创建账户」或 predict_daily --account 创建）")
+        print("\n  （暂无实盘命名账户；练习账户仅出现在「模拟操盘 Web」）")
+    else:
+        print("\n  说明：上表不含「模拟_」练习账户（仅模拟操盘可见）")
 
 
 def action_intraday_add() -> None:
@@ -331,26 +347,44 @@ def action_check_trend() -> None:
 
 def action_daily_pnl() -> None:
     args: list[str] = []
+    # 必须显式传参：脚本侧不能靠「缺省=更新」，否则菜单选 N 仍会拉日线
     if read_yes_no("先更新持仓标的日线?", default=False):
         args.append("--update")
+    else:
+        args.append("--no-update")
     account = read_line("账户名（直接回车=全部账户）")
     if account:
         args.extend(["--account", account])
+    price_asof = read_line("当日盈亏估值日 YYYY-MM-DD（直接回车=持仓日线最新交易日）")
+    if price_asof:
+        args.extend(["--price-asof", price_asof])
+    if read_yes_no("输出历史区间盈亏（起始→估值日）?", default=True):
+        args.append("--history")
+        asof = read_line("历史盈亏估值日 YYYY-MM-DD（直接回车=今天）")
+        if asof:
+            args.extend(["--asof", asof])
     run_script("daily_pnl.py", *args)
+
+
+def action_paper_trade_ui() -> None:
+    print("  启动模拟操盘 Web：http://127.0.0.1:7860")
+    print("  仅操作「模拟_」前缀账户；Ctrl+C 结束服务\n")
+    run_script("app_paper_trade.py")
 
 
 MENU_DAILY = [
     ("1", "每日预测", action_predict_daily),
     ("2", "盘中开仓/加仓扫描", action_intraday_add),
     ("3", "当日盈亏", action_daily_pnl),
-    ("4", "更新持仓（JSON 路径与格式说明）", show_positions_help),
-    ("5", "保存持仓快照", action_snapshot),
-    ("6", "单票趋势检查", action_check_trend),
-    ("7", "查看历史流水", action_snapshot_list),
-    ("8", "创建账户", action_create_account),
-    ("9", "修改账户名", action_rename_account),
-    ("10", "删除账户", action_delete_account),
-    ("11", "列出所有账户", action_list_accounts),
+    ("4", "模拟操盘 Web", action_paper_trade_ui),
+    ("5", "更新持仓（JSON 路径与格式说明）", show_positions_help),
+    ("6", "保存持仓快照", action_snapshot),
+    ("7", "单票趋势检查", action_check_trend),
+    ("8", "查看历史流水", action_snapshot_list),
+    ("9", "创建账户", action_create_account),
+    ("10", "修改账户名", action_rename_account),
+    ("11", "删除账户", action_delete_account),
+    ("12", "列出所有账户", action_list_accounts),
 ]
 
 MENU_TRAIN = [

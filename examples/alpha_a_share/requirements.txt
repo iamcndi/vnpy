@@ -3,3 +3,4 @@ akshare>=1.14.0
 curl_cffi>=0.7.0
 polars>=1.0.0
 lightgbm>=4.0.0
+gradio>=4.0.0

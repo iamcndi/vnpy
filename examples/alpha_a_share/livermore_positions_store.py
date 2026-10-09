@@ -13,6 +13,9 @@ ACCOUNTS_DIR = ALPHA_LAB_PATH / "accounts"
 POSITIONS_PATH = ALPHA_LAB_PATH / "livermore_positions.json"
 HISTORY_PATH = ALPHA_LAB_PATH / "livermore_positions_history.jsonl"
 
+# 练习账户前缀：仅用于模拟操盘 Web，不参与每日预测/盘中扫描/当日盈亏等实盘流程
+SIM_PREFIX = "模拟_"
+
 
 def normalize_account(account: str | None) -> str | None:
     """账户名去空白；空串视为默认账本。"""
@@ -50,16 +53,35 @@ def history_path_for(positions_path: Path | str) -> Path:
     return p.parent / "livermore_positions_history.jsonl"
 
 
-def list_accounts() -> list[str]:
-    """已创建的命名账户（不含默认账本）。"""
+def is_sim_account(account: str | None) -> bool:
+    """是否为练习账户（名称以「模拟_」开头）。"""
+    acc = normalize_account(account)
+    return acc is not None and acc.startswith(SIM_PREFIX)
+
+
+def list_accounts(*, include_sim: bool = True) -> list[str]:
+    """已创建的命名账户（不含默认账本）。默认含练习账户；实盘流程请用 list_live_accounts。"""
     if not ACCOUNTS_DIR.exists():
         return []
-    return sorted(d.name for d in ACCOUNTS_DIR.iterdir() if d.is_dir())
+    names = sorted(d.name for d in ACCOUNTS_DIR.iterdir() if d.is_dir())
+    if include_sim:
+        return names
+    return [n for n in names if not n.startswith(SIM_PREFIX)]
+
+
+def list_live_accounts() -> list[str]:
+    """实盘命名账户（排除「模拟_」练习账户）。"""
+    return list_accounts(include_sim=False)
+
+
+def list_sim_accounts_store() -> list[str]:
+    """练习账户列表（仅「模拟_」前缀）。"""
+    return [n for n in list_accounts(include_sim=True) if n.startswith(SIM_PREFIX)]
 
 
 def all_prediction_accounts() -> list[str | None]:
-    """每日预测管仓账户列表：有默认文件或无命名账户时含默认账本，再加全部命名账户。"""
-    named = list_accounts()
+    """每日预测管仓账户：默认账本 + 实盘命名账户（不含练习账户）。"""
+    named = list_live_accounts()
     accounts: list[str | None] = []
     if POSITIONS_PATH.exists() or not named:
         accounts.append(None)
@@ -223,9 +245,11 @@ def merge_broker_position(
     cost: float,
     latest_price: float | None = None,
     last_buy: float | None = None,
+    last_buy_date: str | None = None,
 ) -> dict:
     """
     用券商截图字段合并持仓；high 只升不降（保留 predict_daily 建议或手动改过的更高值）。
+    last_buy_date：最近一次买入交易日（YYYY-MM-DD）；未传入则保留原值。
     """
     old = existing or {}
     old_high = float(old.get("high", 0) or 0)
@@ -242,6 +266,9 @@ def merge_broker_position(
         "stage": int(old.get("stage", 1) or 1),
         "halved": bool(old.get("halved", False)),
     }
+    buy_date = (last_buy_date or "").strip() or (old.get("last_buy_date") or "")
+    if buy_date:
+        out["last_buy_date"] = str(buy_date)
     if int(shares) <= 0:
         return out
     return out

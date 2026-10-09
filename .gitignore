@@ -41,5 +41,7 @@ _templates
 # Alpha
 lab/
 alpha_data/livermore_positions.json
+alpha_data/livermore_positions_history.jsonl
+alpha_data/accounts/
 /.mypy_cache
 .venv/lib/python3.11
