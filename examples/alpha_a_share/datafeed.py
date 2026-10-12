@@ -35,6 +35,10 @@ EXCHANGE_VT2BS = {
 BAOSTOCK_FIELDS = "date,open,high,low,close,volume,amount"
 EASTMONEY_KLINE_URL = "https://push2his.eastmoney.com/api/qt/stock/kline/get"
 TENCENT_HK_KLINE_URL = "https://web.ifzq.gtimg.cn/appstock/app/fqkline/get"
+SINA_BJ_KLINE_URL = (
+    "https://money.finance.sina.com.cn/quotes_service/api/json_v2.php/"
+    "CN_MarketData.getKLineData"
+)
 
 
 def data_end_date() -> str:
@@ -55,12 +59,19 @@ def _is_hk_exchange(exchange: Exchange) -> bool:
 
 
 def _eastmoney_secid(code: str, exchange: Exchange) -> str:
-    """东方财富 secid：A 股 0/1.xxxxxx，港股 116.xxxxx"""
+    """东方财富 secid：沪 1. / 深北 0. / 港 116."""
     if _is_hk_exchange(exchange):
         return f"116.{code}"
+    if exchange == Exchange.BSE:
+        # 北交所（含 920/8/4 开头）走深市同款 market=0
+        return f"0.{code}"
     if _is_etf(code):
         return f"1.{code}" if code.startswith(("51", "56", "58")) else f"0.{code}"
     return f"1.{code}" if code.startswith("6") else f"0.{code}"
+
+
+def _is_bse_exchange(exchange: Exchange) -> bool:
+    return exchange == Exchange.BSE
 
 
 def _volume_scale(exchange: Exchange) -> float:
@@ -158,17 +169,180 @@ def fetch_bars_eastmoney(
     if proc.returncode != 0:
         time.sleep(1.5)
         proc = subprocess.run(curl_cmd, capture_output=True, text=True, check=False)
-    if proc.returncode != 0:
-        raise RuntimeError(proc.stderr.strip() or f"curl exit {proc.returncode}")
+    if proc.returncode == 0 and proc.stdout.strip():
+        payload = json.loads(proc.stdout)
+        klines = (payload.get("data") or {}).get("klines") or []
+        bars = _klines_to_bars(klines, code, exchange, "EM", vol_scale)
+        if bars:
+            return bars
 
-    payload = json.loads(proc.stdout)
-    klines = (payload.get("data") or {}).get("klines") or []
-    return _klines_to_bars(klines, code, exchange, "EM", vol_scale)
+    # 3) urllib 直连（部分环境 curl 对东财空回复，北交所可走此路径）
+    try:
+        from urllib.parse import urlencode
+        from urllib.request import Request, urlopen
+
+        query = urlencode(params)
+        req = Request(
+            f"{EASTMONEY_KLINE_URL}?{query}",
+            headers={
+                "User-Agent": "Mozilla/5.0",
+                "Referer": "https://quote.eastmoney.com/",
+            },
+        )
+        with urlopen(req, timeout=30) as resp:  # noqa: S310
+            payload = json.loads(resp.read().decode("utf-8"))
+        klines = (payload.get("data") or {}).get("klines") or []
+        return _klines_to_bars(klines, code, exchange, "EM", vol_scale)
+    except Exception as exc:
+        raise RuntimeError(proc.stderr.strip() or str(exc) or "eastmoney 拉取失败") from exc
 
 
 def _tencent_hk_symbol(code: str) -> str:
     """腾讯港股代码需 5 位，如 01024 → hk01024"""
     return f"hk{code.zfill(5)}"
+
+
+def fetch_bars_sina_bj(
+    code: str,
+    exchange: Exchange,
+    start_date: str,
+    end_date: str,
+) -> list[BarData]:
+    """新浪北交所日线（东财不可用时的主力备用）。"""
+    if not _is_bse_exchange(exchange):
+        return []
+    # scale=240 日线；datalen 足够覆盖增量/近三年
+    url = (
+        f"{SINA_BJ_KLINE_URL}?symbol=bj{code}&scale=240&ma=no&datalen=1023"
+    )
+    payload: list | None = None
+    try:
+        from curl_cffi import requests as cffi_requests
+
+        resp = cffi_requests.get(
+            url,
+            impersonate="chrome",
+            timeout=30,
+            proxies={"http": None, "https": None},
+        )
+        payload = resp.json()
+    except Exception:
+        payload = None
+
+    if payload is None and shutil.which("curl"):
+        proc = subprocess.run(
+            ["curl", "-sS", "--noproxy", "*", "-m", "30", "-A", "Mozilla/5.0", url],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if proc.returncode == 0 and proc.stdout.strip():
+            payload = json.loads(proc.stdout)
+
+    if not isinstance(payload, list):
+        return []
+
+    start_dt = datetime.strptime(start_date, "%Y-%m-%d").date()
+    end_dt = datetime.strptime(end_date, "%Y-%m-%d").date()
+    bars: list[BarData] = []
+    for row in payload:
+        if not isinstance(row, dict):
+            continue
+        date_str = str(row.get("day") or "")[:10]
+        if not date_str:
+            continue
+        dt = datetime.strptime(date_str, "%Y-%m-%d").date()
+        if dt < start_dt or dt > end_dt:
+            continue
+        close = float(row["close"])
+        if close <= 0:
+            continue
+        bars.append(
+            BarData(
+                symbol=code,
+                exchange=exchange,
+                datetime=datetime.combine(dt, datetime.min.time()),
+                interval=Interval.DAILY,
+                open_price=float(row["open"]),
+                high_price=float(row["high"]),
+                low_price=float(row["low"]),
+                close_price=close,
+                volume=float(row.get("volume") or 0),
+                turnover=0.0,
+                gateway_name="SINA",
+            )
+        )
+    return bars
+
+
+def fetch_bars_tencent_bj(
+    code: str,
+    exchange: Exchange,
+    start_date: str,
+    end_date: str,
+) -> list[BarData]:
+    """腾讯财经北交所日线（前复权）。"""
+    if not _is_bse_exchange(exchange):
+        return []
+    symbol = f"bj{code}"
+    param = f"{symbol},day,,,320,qfq"
+    url = f"{TENCENT_HK_KLINE_URL}?param={param}"
+    payload: dict | None = None
+    try:
+        from curl_cffi import requests as cffi_requests
+
+        resp = cffi_requests.get(
+            url,
+            impersonate="chrome",
+            timeout=30,
+            proxies={"http": None, "https": None},
+        )
+        payload = resp.json()
+    except Exception:
+        payload = None
+    if not payload and shutil.which("curl"):
+        proc = subprocess.run(
+            ["curl", "-sS", "--noproxy", "*", "-m", "30", "-A", "Mozilla/5.0", url],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if proc.returncode == 0 and proc.stdout.strip():
+            payload = json.loads(proc.stdout)
+    if not payload:
+        return []
+    rows = (payload.get("data") or {}).get(symbol, {}).get("qfqday") or (
+        (payload.get("data") or {}).get(symbol, {}).get("day") or []
+    )
+    start_dt = datetime.strptime(start_date, "%Y-%m-%d").date()
+    end_dt = datetime.strptime(end_date, "%Y-%m-%d").date()
+    bars: list[BarData] = []
+    for row in rows:
+        if not row or len(row) < 6:
+            continue
+        date_str, o_str, c_str, h_str, l_str, v_str = row[:6]
+        dt = datetime.strptime(date_str, "%Y-%m-%d").date()
+        if dt < start_dt or dt > end_dt:
+            continue
+        close = float(c_str)
+        if close <= 0:
+            continue
+        bars.append(
+            BarData(
+                symbol=code,
+                exchange=exchange,
+                datetime=datetime.combine(dt, datetime.min.time()),
+                interval=Interval.DAILY,
+                open_price=float(o_str),
+                high_price=float(h_str),
+                low_price=float(l_str),
+                close_price=close,
+                volume=float(v_str),
+                turnover=0.0,
+                gateway_name="TX",
+            )
+        )
+    return bars
 
 
 def fetch_bars_tencent_hk(
@@ -352,7 +526,9 @@ def fetch_bars_baostock(
     start_date: str,
     end_date: str,
 ) -> list[BarData]:
-    """从 baostock 拉取前复权日线（需已 login）"""
+    """从 baostock 拉取前复权日线（需已 login；不支持北交所）"""
+    if _is_bse_exchange(exchange):
+        raise RuntimeError("baostock 不支持北交所（仅 sh/sz）")
     bs_code = f"{EXCHANGE_VT2BS[exchange]}.{code}"
     rs = bs.query_history_k_data_plus(
         bs_code,
@@ -445,6 +621,27 @@ def download_daily_data(
                 except Exception as exc:
                     print(f"    腾讯财经失败: {exc}")
 
+            # 北交所：东财常被掐；新浪+腾讯合并（腾讯常更新到最新交易日）
+            if not bars and _is_bse_exchange(exchange):
+                merged: dict = {}
+                srcs: list[str] = []
+                for label, fetcher in (
+                    ("sina", fetch_bars_sina_bj),
+                    ("tencent", fetch_bars_tencent_bj),
+                ):
+                    try:
+                        part = fetcher(code, exchange, start_date, end_date)
+                    except Exception as exc:
+                        print(f"    {label}北交所失败: {exc}")
+                        part = []
+                    if part:
+                        srcs.append(label)
+                        for b in part:
+                            merged[b.datetime.date()] = b
+                if merged:
+                    bars = [merged[k] for k in sorted(merged)]
+                    source = "+".join(srcs)
+
             if not bars and not skip_eastmoney:
                 tried_eastmoney = True
                 try:
@@ -470,7 +667,7 @@ def download_daily_data(
                         skip_eastmoney = True
                         print("  东财连续失败，本轮剩余股票改走 baostock")
 
-            if not bars and not _is_hk_exchange(exchange):
+            if not bars and not _is_hk_exchange(exchange) and not _is_bse_exchange(exchange):
                 if not bs_logged_in:
                     lg = bs.login()
                     if lg.error_code != "0":
@@ -483,6 +680,8 @@ def download_daily_data(
                         source = "baostock"
                 except Exception as exc:
                     print(f"    baostock 失败: {exc}")
+            elif not bars and _is_bse_exchange(exchange):
+                print("    baostock 跳过（不支持北交所）；请依赖东财/akshare")
 
             if bars:
                 lab.save_bar_data(bars)

@@ -60,7 +60,7 @@ PREDICTION_WINDOW_DAYS = 30
 DISPLAY_TOP_N = 5
 DISPLAY_BOTTOM_N = 5
 
-# 与 backtest_1y_livermore.py（4万 / Top5）对齐
+# 与 backtest_1y_livermore.py（Top5 / 最多5只）对齐；回测资金 20 万、单次买入 ≥1 万
 LIVERMORE_TOP_N = 5
 BREAKOUT_WINDOW = 20
 ADD_SPACING_PCT = 0.10
@@ -250,13 +250,17 @@ def evaluate_held_action(
     if (
         not halved
         and stage < len(PYRAMID_FRACTIONS)
-        and in_candidates
         and last_buy > 0
         and price >= last_buy * (1.0 + ADD_SPACING_PCT)
     ):
+        note_top = (
+            f"仍在 Top{LIVERMORE_TOP_N}"
+            if in_candidates
+            else f"已掉出 Top{LIVERMORE_TOP_N}（仍可加仓）"
+        )
         return (
             "加仓",
-            f"相对上次买入再涨 ≥{ADD_SPACING_PCT * 100:.0f}% 且仍在 Top{LIVERMORE_TOP_N}",
+            f"相对上次买入再涨 ≥{ADD_SPACING_PCT * 100:.0f}% | {note_top}",
             {"stage": stage + 1, "last_buy": price, "high": peak},
         )
 
@@ -295,7 +299,11 @@ def compute_price_levels(
 
     if not halved and stage < len(PYRAMID_FRACTIONS) and last_buy > 0:
         add_px = last_buy * (1.0 + ADD_SPACING_PCT)
-        top5 = f"且仍在Top{LIVERMORE_TOP_N}" if in_candidates else f"(已掉出Top{LIVERMORE_TOP_N}不加仓)"
+        top5 = (
+            f"仍在Top{LIVERMORE_TOP_N}"
+            if in_candidates
+            else f"已掉出Top{LIVERMORE_TOP_N}亦可加"
+        )
         levels.append(("加仓", add_px, f"收盘≥{add_px:.2f} {top5}"))
 
     early_arm = cost * (1.0 + EARLY_ZONE_ARM_PCT)

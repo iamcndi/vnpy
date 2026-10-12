@@ -232,15 +232,14 @@ def build_trade_advice(
             add = max(0, tgt - shares)
             reasons.append(sig.get("held_note", ""))
             reasons.append(
-                f"相对上次买入涨 ≥{ADD_SPACING_PCT:.0%} 且仍在 Top{LIVERMORE_TOP_N}"
-                if in_top5
-                else f"价格达加仓间距，但已掉出 Top{LIVERMORE_TOP_N}，策略不加仓"
+                f"相对上次买入涨 ≥{ADD_SPACING_PCT:.0%}"
+                + (
+                    f" 且仍在 Top{LIVERMORE_TOP_N}"
+                    if in_top5
+                    else f"（已掉出 Top{LIVERMORE_TOP_N}，仍可加仓）"
+                )
             )
-            if in_top5:
-                detail = f"建议加约 {add} 股至约 {tgt} 股（单股预算约 {stock_budget:,.0f} 元）"
-            else:
-                action = "持仓"
-                detail = "不加仓，继续按止损/早期盈利区/移动止盈持有"
+            detail = f"建议加约 {add} 股至约 {tgt} 股（单股预算约 {stock_budget:,.0f} 元）"
         else:
             action = "持仓"
             reasons.append(sig.get("held_note", f"成本盈亏 {pnl * 100:+.1f}%"))
@@ -468,7 +467,7 @@ def print_report(r: dict) -> None:
     print(f"  趋势评级: 【{r['rating']}】  {r['summary']}")
     print()
     print("  规则摘要:")
-    print(f"    建仓 = Top{LIVERMORE_TOP_N} + {BREAKOUT_WINDOW}日突破 | 加仓 = 涨{ADD_SPACING_PCT:.0%}且仍在Top5")
+    print(f"    建仓 = Top{LIVERMORE_TOP_N} + {BREAKOUT_WINDOW}日突破 | 加仓 = 涨{ADD_SPACING_PCT:.0%}（不要求Top5）")
     print(
         f"    止损 = -{STOP_LOSS_PCT:.0%} | "
         f"早期区 +{EARLY_ZONE_ARM_PCT:.0%}~+{TRAIL_ACTIVATE_PCT:.0%} 吐回利润{EARLY_ZONE_GIVEBACK_PCT:.0%}清 | "

@@ -175,7 +175,8 @@ def scan_position(
     max_chase = trigger * (1.0 + INTRADAY_MAX_CHASE_PCT)
     stop_px = cost * (1.0 - STOP_LOSS_PCT)
 
-    stock_budget = estimate_equity(book, {vt: price}, default_price=price, focus_vt=vt)
+    equity = estimate_equity(book, {vt: price}, default_price=price, focus_vt=vt)
+    stock_budget = equity / LIVERMORE_TOP_N if equity > 0 else 0.0
     next_stage = stage + 1
     tgt_shares = suggest_target_shares(stock_budget, next_stage, price) if eligible else 0
     add_shares = max(0, tgt_shares - shares) if eligible else 0

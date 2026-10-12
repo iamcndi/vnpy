@@ -372,6 +372,13 @@ def action_paper_trade_ui() -> None:
     run_script("app_paper_trade.py")
 
 
+def action_backtest_replay_ui() -> None:
+    print("  启动回测交易回放 Web：http://127.0.0.1:7861")
+    print("  数据来自 alpha_data/backtest_replay/（利弗莫尔回测默认落盘）")
+    print("  Ctrl+C 结束服务\n")
+    run_script("app_backtest_replay.py")
+
+
 MENU_DAILY = [
     ("1", "每日预测", action_predict_daily),
     ("2", "盘中开仓/加仓扫描", action_intraday_add),
@@ -397,7 +404,8 @@ MENU_BACKTEST = [
     ("1", "ML 等权 Top 1/3（基准）", lambda: run_script("backtest_1y.py")),
     ("2", "ML + 固定止损止盈", lambda: run_script("backtest_1y_sltp.py")),
     ("3", "ML + 移动止盈 + 组合回撤熔断", lambda: run_script("backtest_1y_circuit.py")),
-    ("4", "利弗莫尔（4 万 / Top5 / 整手）", lambda: run_script("backtest_1y_livermore.py")),
+    ("4", "利弗莫尔（20万/最多5只/首仓满额）", lambda: run_script("backtest_1y_livermore.py")),
+    ("5", "回测交易回放 Web", action_backtest_replay_ui),
 ]
 
 MENU_OTHER = [

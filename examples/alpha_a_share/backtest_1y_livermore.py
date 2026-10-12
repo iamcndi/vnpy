@@ -1,5 +1,5 @@
 """
-利弗莫尔趋势管仓一年回测（小资金版：4万 + Top5 + 100股整手）
+利弗莫尔趋势管仓一年回测（20万 + 最多5只 + 单次买入≥1万）
 
 同区间强制对比：
   基准 A: ML 等权 Top5
@@ -9,10 +9,15 @@
 用法：
   cd /Users/chendi/project/vnpy
   .venv/bin/python examples/alpha_a_share/backtest_1y_livermore.py
+  # Qlib 信号（同规则对比，需已导出 qlib_pred_*）：
+  .venv/bin/python examples/alpha_a_share/backtest_1y_livermore.py --signal-source qlib
+  # 读已有 lgb_pred_*（不重训）：
+  .venv/bin/python examples/alpha_a_share/backtest_1y_livermore.py --signal-source file
 """
 
 from __future__ import annotations
 
+import argparse
 import json
 import os
 import sys
@@ -33,7 +38,9 @@ from vnpy.alpha.model.lgb_model import LGBAlphaModel
 from vnpy.trader.constant import Direction, Interval
 from vnpy.trader.object import BarData, TradeData
 
+from backtest_replay_store import save_engine_replay
 from datafeed import download_daily_data
+from signal_source import load_signal_parquet, resolve_prefix
 from stock_universe import STOCK_LIST
 
 
@@ -45,18 +52,42 @@ TRAIN_START = "2023-01-01"
 TRAIN_END = "2025-06-28"
 
 LOOKBACK_DAYS = 90
-INITIAL_CAPITAL = 40_000          # 小资金实盘约束
+INITIAL_CAPITAL = 200_000         # 回测资金
 ANNUAL_TRADING_DAYS = 250
-TOP_N = 5                         # 只做信号最强的 N 只
+TOP_N = 5                         # 信号候选 / 最多持仓只数
+MAX_HOLDINGS = 5
 MIN_LOT = 100                     # A 股整手
+BUY_NOTIONAL_MIN = 10_000         # 单次买入金额下限（无上限）
 
-COMMISSION_RATE_BUY = 0.00025
-COMMISSION_RATE_SELL = 0.00125
+# 现行 A 股常见口径：佣金万2（买卖）、印花税万5（仅卖）、过户费十万分之一（买卖）；不免最低5元
+COMMISSION_RATE = 0.0002
+STAMP_TAX_RATE = 0.0005
+TRANSFER_FEE_RATE = 0.00001
+
+
+def buy_fee_rate(
+    commission: float = COMMISSION_RATE,
+    transfer: float = TRANSFER_FEE_RATE,
+) -> float:
+    return commission + transfer
+
+
+def sell_fee_rate(
+    commission: float = COMMISSION_RATE,
+    stamp: float = STAMP_TAX_RATE,
+    transfer: float = TRANSFER_FEE_RATE,
+) -> float:
+    return commission + stamp + transfer
+
+
+COMMISSION_RATE_BUY = buy_fee_rate()
+COMMISSION_RATE_SELL = sell_fee_rate()
 
 BREAKOUT_WINDOW = 20
-# 小资金下金字塔缩为两档，避免加仓金额远小于 1 手
-PYRAMID_FRACTIONS = (0.60, 0.40)
+# 首仓用满「现金/剩余名额」；加仓用剩余现金×比例，不要求仍在 Top5
+PYRAMID_FRACTIONS = (1.0,)
 ADD_SPACING_GRID = [0.05, 0.08, 0.10]
+ADD_NOTIONAL_FRAC = 0.25  # 加仓：可用现金×25%（且≥1万）
 
 STOP_LOSS_PCT = 0.07
 TRAIL_ACTIVATE_PCT = 0.15
@@ -76,6 +107,13 @@ def round_lot(shares: float | int, lot: int = MIN_LOT) -> int:
     if s < lot:
         return 0
     return s // lot * lot
+
+
+def buy_shares_for_notional(notional: float, price: float) -> int:
+    """按名义金额换算整手股数；不足 BUY_NOTIONAL_MIN 则不下单。"""
+    if price <= 0 or notional < BUY_NOTIONAL_MIN:
+        return 0
+    return round_lot(notional / price)
 
 
 def select_top_n(signal: pl.DataFrame, n: int = TOP_N) -> tuple[set[str], int]:
@@ -126,12 +164,19 @@ def build_dataset_df(lab, vt_symbols, start, end, lookback_days):
     return df
 
 
-def setup_contracts(lab: AlphaLab) -> None:
+def setup_contracts(
+    lab: AlphaLab,
+    *,
+    long_rate: float | None = None,
+    short_rate: float | None = None,
+) -> None:
+    buy = COMMISSION_RATE_BUY if long_rate is None else long_rate
+    sell = COMMISSION_RATE_SELL if short_rate is None else short_rate
     for code, exchange_str, _name in STOCK_LIST:
         lab.add_contract_setting(
             f"{code}.{exchange_str}",
-            long_rate=COMMISSION_RATE_BUY,
-            short_rate=COMMISSION_RATE_SELL,
+            long_rate=buy,
+            short_rate=sell,
             size=1,
             pricetick=0.01,
         )
@@ -322,12 +367,6 @@ class LivermoreStrategy(AlphaStrategy):
             return False
         return close >= max(window) - 1e-12
 
-    def _stage_target_shares(self, stage: int, stock_budget: float, price: float) -> int:
-        if stage <= 0 or price <= 0:
-            return 0
-        frac = sum(self.pyramid_fractions[:stage])
-        return round_lot(stock_budget * frac / price)
-
     def on_bars(self, bars: dict[str, BarData]) -> None:
         for vt_symbol, bar in bars.items():
             if bar.close_price > 0:
@@ -338,12 +377,21 @@ class LivermoreStrategy(AlphaStrategy):
                     ]
 
         signal = self.get_signal()
-        candidates, n_slots = select_top_n(signal)
+        candidates, _n_slots = select_top_n(signal)
 
-        portfolio_value = self.get_portfolio_value()
-        stock_budget = portfolio_value / n_slots
+        # 空仓名额集中用现金：单笔预算 = 可用现金 / 剩余可开仓位数
+        n_held = sum(1 for vt in bars if self.get_pos(vt) > 0)
+        slots_left = MAX_HOLDINGS - n_held
+        cash_usable = self.get_cash_available() * 0.99  # 略留手续费余量
+        open_budget = (cash_usable / slots_left) if slots_left > 0 else 0.0
+        add_budget = (
+            cash_usable * ADD_NOTIONAL_FRAC
+            if ADD_NOTIONAL_FRAC > 0
+            else 0.0
+        )
 
         targets: dict[str, int] = {vt: 0 for vt in bars}
+        n_opening = 0
 
         for vt_symbol, bar in bars.items():
             pos = self.get_pos(vt_symbol)
@@ -353,14 +401,21 @@ class LivermoreStrategy(AlphaStrategy):
 
             if pos <= 0:
                 self._reset_symbol(vt_symbol)
-                if vt_symbol in candidates and self._is_breakout(vt_symbol, price):
-                    stage = 1
-                    self.pyramid_stage[vt_symbol] = stage
-                    targets[vt_symbol] = self._stage_target_shares(stage, stock_budget, price)
+                if (
+                    vt_symbol in candidates
+                    and self._is_breakout(vt_symbol, price)
+                    and n_opening < slots_left
+                ):
+                    sh = buy_shares_for_notional(open_budget, price)
+                    if sh >= MIN_LOT:
+                        self.pyramid_stage[vt_symbol] = 1
+                        targets[vt_symbol] = sh
+                        n_opening += 1
                 continue
 
             cost = self.cost_basis.get(vt_symbol, 0.0)
             if cost <= 0:
+                targets[vt_symbol] = round_lot(pos)
                 continue
 
             peak = max(self.high_price.get(vt_symbol, bar.high_price), bar.high_price)
@@ -426,20 +481,22 @@ class LivermoreStrategy(AlphaStrategy):
                         self.trail_clear_count += 1
                     continue
 
+            # 持仓默认保持手数；涨够间距可加仓（不要求仍在 Top5）
             stage = self.pyramid_stage.get(vt_symbol, 1)
             if (
-                not self.halved.get(vt_symbol, False)
-                and stage < len(self.pyramid_fractions)
-                and vt_symbol in candidates
+                ADD_NOTIONAL_FRAC > 0
+                and not self.halved.get(vt_symbol, False)
+                and stage < 2
             ):
                 last_buy = self.last_buy_price.get(vt_symbol, cost)
                 if last_buy > 0 and price >= last_buy * (1.0 + self.add_spacing_pct):
-                    stage += 1
-                    self.pyramid_stage[vt_symbol] = stage
+                    add_sh = buy_shares_for_notional(add_budget, price)
+                    if add_sh >= MIN_LOT:
+                        self.pyramid_stage[vt_symbol] = 2
+                        targets[vt_symbol] = round_lot(pos) + add_sh
+                        continue
 
-            targets[vt_symbol] = self._stage_target_shares(stage, stock_budget, price)
-            if self.halved.get(vt_symbol, False):
-                targets[vt_symbol] = round_lot(pos)
+            targets[vt_symbol] = round_lot(pos)
 
         for vt_symbol, bar in bars.items():
             self.set_target(vt_symbol, targets.get(vt_symbol, 0))
@@ -490,24 +547,25 @@ def pick_stats(stats: dict) -> dict:
     return {k: stats.get(k, float("nan")) for k in keys}
 
 
-def main() -> None:
-    print("=" * 78)
-    print("  利弗莫尔趋势管仓一年回测（小资金 4万 / Top5 / 整手100）")
-    print(f"  回测期: {BACKTEST_START} ~ {BACKTEST_END}")
-    print(f"  资金={INITIAL_CAPITAL:,}  TopN={TOP_N}  整手={MIN_LOT}")
-    print(f"  突破N={BREAKOUT_WINDOW}  金字塔={PYRAMID_FRACTIONS}")
-    print(f"  止损={STOP_LOSS_PCT:.0%}  移动A/B={TRAIL_ACTIVATE_PCT:.0%}/{TRAIL_PULLBACK_PCT:.0%}")
-    print(f"  加仓间距网格 X={ADD_SPACING_GRID}")
-    print("=" * 78)
+def _build_signal_df(lab, vt_symbols: list[str], signal_source: str) -> tuple[pl.DataFrame, str]:
+    """
+    返回 (signal_df, source_label)。
+    vnpy=现场训练（默认）；qlib/file=读 parquet，不训练。
+    """
+    source = (signal_source or "vnpy").strip().lower()
+    if source in ("qlib", "file"):
+        prefix = resolve_prefix(source)
+        signal_dir = os.path.join(ALPHA_LAB_PATH, "signal")
+        print(f"\n[2/4] 加载信号 parquet: {prefix}_*  [{BACKTEST_START} ~ {BACKTEST_END}]")
+        signal_df = load_signal_parquet(signal_dir, prefix, BACKTEST_START, BACKTEST_END)
+        print(
+            f"  信号记录数: {len(signal_df)}  "
+            f"日期: {signal_df['datetime'].min()} ~ {signal_df['datetime'].max()}  "
+            f"股票数: {signal_df['vt_symbol'].n_unique()}"
+        )
+        return signal_df, source
 
-    lab = AlphaLab(ALPHA_LAB_PATH)
-    vt_symbols = [f"{code}.{exch}" for code, exch, _ in STOCK_LIST]
-    setup_contracts(lab)
-
-    print("\n[1/4] 检查/下载日线...")
-    download_daily_data(lab, STOCK_LIST, TRAIN_START)
-
-    print("\n[2/4] 构建因子 + 训练 LightGBM...")
+    print("\n[2/4] 构建因子 + 训练 LightGBM（默认 vnpy）...")
     df = build_dataset_df(lab, vt_symbols, TRAIN_START, BACKTEST_END, LOOKBACK_DAYS)
     print(f"  数据范围: {df['datetime'].min()} ~ {df['datetime'].max()}")
     print(f"  行数: {len(df)}, 股票数: {df['vt_symbol'].n_unique()}")
@@ -528,6 +586,71 @@ def main() -> None:
         pl.Series("signal", preds)
     )
     print(f"  信号记录数: {len(signal_df)}")
+    return signal_df, "vnpy"
+
+
+def main() -> None:
+    ap = argparse.ArgumentParser(description="利弗莫尔一年回测（可选 Qlib 信号）")
+    ap.add_argument(
+        "--signal-source",
+        choices=["vnpy", "qlib", "file"],
+        default="vnpy",
+        help="vnpy=现场训 LGB（默认）；qlib=读 qlib_pred_*；file=读 lgb_pred_*",
+    )
+    ap.add_argument(
+        "--save-replay",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="落盘最优 X 的逐日成交/权益供 Gradio 回放（默认开；--no-save-replay 关闭）",
+    )
+    ap.add_argument(
+        "--commission-rate",
+        type=float,
+        default=COMMISSION_RATE,
+        help="券商佣金费率（买卖，默认万2=0.0002；不免最低5元）",
+    )
+    ap.add_argument(
+        "--stamp-tax",
+        type=float,
+        default=STAMP_TAX_RATE,
+        help="印花税（仅卖出，默认万5=0.0005）",
+    )
+    ap.add_argument(
+        "--transfer-fee",
+        type=float,
+        default=TRANSFER_FEE_RATE,
+        help="过户费（买卖，默认十万分之一=0.00001）",
+    )
+    args = ap.parse_args()
+
+    long_rate = buy_fee_rate(args.commission_rate, args.transfer_fee)
+    short_rate = sell_fee_rate(args.commission_rate, args.stamp_tax, args.transfer_fee)
+
+    print("=" * 78)
+    print("  利弗莫尔趋势管仓一年回测（20万 / 最多5只 / 首仓=现金÷剩余名额）")
+    print(f"  回测期: {BACKTEST_START} ~ {BACKTEST_END}")
+    print(f"  信号源: {args.signal_source}")
+    print(
+        f"  资金={INITIAL_CAPITAL:,}  最多持仓={MAX_HOLDINGS}  TopN={TOP_N}  整手={MIN_LOT}  "
+        f"单次买入≥{BUY_NOTIONAL_MIN:,}  加仓比例={ADD_NOTIONAL_FRAC:.0%}"
+    )
+    print(f"  突破N={BREAKOUT_WINDOW}  金字塔={PYRAMID_FRACTIONS}")
+    print(f"  止损={STOP_LOSS_PCT:.0%}  移动A/B={TRAIL_ACTIVATE_PCT:.0%}/{TRAIL_PULLBACK_PCT:.0%}")
+    print(f"  加仓间距网格 X={ADD_SPACING_GRID}")
+    print(
+        f"  费率: 佣金={args.commission_rate:.5f}  印花税(卖)={args.stamp_tax:.5f}  "
+        f"过户费={args.transfer_fee:.5f}  → 买={long_rate:.5f} 卖={short_rate:.5f}（不免5）"
+    )
+    print("=" * 78)
+
+    lab = AlphaLab(ALPHA_LAB_PATH)
+    vt_symbols = [f"{code}.{exch}" for code, exch, _ in STOCK_LIST]
+    setup_contracts(lab, long_rate=long_rate, short_rate=short_rate)
+
+    print("\n[1/4] 检查/下载日线...")
+    download_daily_data(lab, STOCK_LIST, TRAIN_START)
+
+    signal_df, source_label = _build_signal_df(lab, vt_symbols, args.signal_source)
 
     print("\n[3/4] 基准 A/B 回测...")
     stats_a, _ = run_one(lab, vt_symbols, signal_df, EqualWeightStrategy)
@@ -686,14 +809,50 @@ def main() -> None:
         f"Δ成交={profit_lock_compare['delta']['total_trade_count']:+}"
     )
 
-    result_path = os.path.join(ALPHA_LAB_PATH, "livermore_result_40k.json")
+    replay_dir = None
+    if args.save_replay:
+        print(f"\n[6/6] 落盘回放数据（最优 X={best_x:.0%}，原利弗莫尔）...")
+        try:
+            replay_dir = save_engine_replay(
+                eng_base,
+                ALPHA_LAB_PATH,
+                strategy_name="livermore",
+                signal_source=source_label,
+                add_spacing_pct=best_x,
+                stats=pick_stats(stats_lm_base),
+                extra_meta={
+                    "period": {"train": [TRAIN_START, TRAIN_END], "backtest": [BACKTEST_START, BACKTEST_END]},
+                    "top_n": TOP_N,
+                    "max_holdings": MAX_HOLDINGS,
+                    "buy_notional_min": BUY_NOTIONAL_MIN,
+                    "add_notional_frac": ADD_NOTIONAL_FRAC,
+                    "initial_capital": INITIAL_CAPITAL,
+                    "commission_rate": args.commission_rate,
+                    "stamp_tax": args.stamp_tax,
+                    "transfer_fee": args.transfer_fee,
+                    "long_rate": long_rate,
+                    "short_rate": short_rate,
+                    "min_commission": 0,
+                },
+            )
+            print(f"  回放目录: {replay_dir}")
+            print("  查看: .venv/bin/python examples/alpha_a_share/app_backtest_replay.py")
+        except Exception as e:
+            print(f"  ⚠ 回放落盘失败: {e}")
+
+    suffix = "" if source_label == "vnpy" else f"_{source_label}"
+    result_path = os.path.join(ALPHA_LAB_PATH, f"livermore_result_200k{suffix}.json")
     with open(result_path, "w") as f:
         json.dump(
             {
+                "signal_source": source_label,
                 "period": {"train": [TRAIN_START, TRAIN_END], "backtest": [BACKTEST_START, BACKTEST_END]},
                 "params": {
                     "initial_capital": INITIAL_CAPITAL,
                     "top_n": TOP_N,
+                    "max_holdings": MAX_HOLDINGS,
+                    "buy_notional_min": BUY_NOTIONAL_MIN,
+                    "add_notional_frac": ADD_NOTIONAL_FRAC,
                     "min_lot": MIN_LOT,
                     "breakout_window": BREAKOUT_WINDOW,
                     "pyramid": list(PYRAMID_FRACTIONS),
@@ -703,12 +862,19 @@ def main() -> None:
                     "add_spacing_grid": ADD_SPACING_GRID,
                     "profit_lock_arm": PROFIT_LOCK_ARM_PCT,
                     "profit_lock_exit": PROFIT_LOCK_EXIT_PCT,
+                    "commission_rate": args.commission_rate,
+                    "stamp_tax": args.stamp_tax,
+                    "transfer_fee": args.transfer_fee,
+                    "long_rate": long_rate,
+                    "short_rate": short_rate,
+                    "min_commission": 0,
                 },
                 "baseline_A_equal_weight": pick_stats(stats_a),
                 "baseline_B_trail": pick_stats(stats_b),
                 "livermore_grid": liver_rows,
                 "best_by_sharpe": best,
                 "profit_lock_compare": profit_lock_compare,
+                "replay_dir": str(replay_dir) if replay_dir else None,
             },
             f,
             indent=2,

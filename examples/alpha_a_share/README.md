@@ -105,6 +105,27 @@ Python 解释器统一用：
 
 **建议：** 首次使用或隔一段时间重训一次 `run_ml.py`；`predict_daily.py` 依赖其中的模型文件。
 
+### Qlib 双轨对比（研究用，不下单）
+
+独立仓库 `/Users/chendi/project/qlib`（自有 `.venv`）。现有 `predict_daily` / 纸交易**仍用** `lgb_pred_*`；Qlib 另写 `qlib_pred_*`，只做并排评估。
+
+设计文档：`docs/superpowers/specs/2026-10-10-qlib-dual-track-design.md`
+
+```bash
+# 首次：在 qlib 仓建 venv 并 pip install -e .（见该仓 scripts/a_share_bridge/README.md）
+
+# 同源转换 → 训练 3 日 Alpha158+LGB → 导出信号
+.venv/bin/python examples/alpha_a_share/run_qlib_bridge.py convert
+.venv/bin/python examples/alpha_a_share/run_qlib_bridge.py train
+.venv/bin/python examples/alpha_a_share/run_qlib_bridge.py predict
+# 或一步： .venv/bin/python examples/alpha_a_share/run_qlib_bridge.py all
+
+# 与现有 lgb_pred_* 对比（IC / 分层 / Top5 代理净值）
+.venv/bin/python examples/alpha_a_share/compare_vnpy_qlib.py
+```
+
+输出：`alpha_data/signal/qlib_pred_YYYYMMDD.parquet`，摘要在 `alpha_data/evaluation/vnpy_vs_qlib_*`。
+
 ---
 
 ## 三、一年回测（研究 / 对比策略）
@@ -119,16 +140,32 @@ Python 解释器统一用：
 | `backtest_1y.py` | ML 等权 Top 1/3，无个股止损止盈 |
 | `backtest_1y_sltp.py` | ML + 固定止损/止盈网格搜索 |
 | `backtest_1y_circuit.py` | ML + 移动止盈 + 组合回撤熔断 |
-| `backtest_1y_livermore.py` | **小资金 4 万 / Top5 / 整手**；利弗莫尔 vs 基准 A/B 对比 |
+| `backtest_1y_livermore.py` | **20 万 / 最多5只 / 首仓=现金÷剩余名额（≥1万）**；利弗莫尔 vs 基准 A/B；费率默认佣金万2+印花税万5+过户费（不免5） |
 
 ```bash
 .venv/bin/python examples/alpha_a_share/backtest_1y.py
 .venv/bin/python examples/alpha_a_share/backtest_1y_sltp.py
 .venv/bin/python examples/alpha_a_share/backtest_1y_circuit.py
 .venv/bin/python examples/alpha_a_share/backtest_1y_livermore.py
+# 同规则、换 Qlib 信号对比（需先 run_qlib_bridge.py predict；默认 vnpy 行为不变）
+.venv/bin/python examples/alpha_a_share/backtest_1y_livermore.py --signal-source qlib
 ```
 
-利弗莫尔回测结果：`alpha_data/livermore_result_40k.json`
+利弗莫尔回测结果：`alpha_data/livermore_result_200k.json`；Qlib 信号版：`livermore_result_200k_qlib.json`。
+
+### 回测交易回放（落盘 + Gradio）
+
+`backtest_1y_livermore.py` 默认会把**夏普最优 X** 的成交/逐日权益/持仓写入 `alpha_data/backtest_replay/<run_id>/`（可用 `--no-save-replay` 关闭）。
+
+```bash
+# 回测并落盘（示例：Qlib 信号，较快）
+.venv/bin/python examples/alpha_a_share/backtest_1y_livermore.py --signal-source qlib
+
+# 回放页 → http://127.0.0.1:7861
+.venv/bin/python examples/alpha_a_share/app_backtest_replay.py
+```
+
+回放页：选 run → 选交易日/标的 → 权益曲线、K 线买卖点、当日盈亏、成交与持仓表。
 
 ---
 
