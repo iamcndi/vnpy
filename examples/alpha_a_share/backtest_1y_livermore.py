@@ -325,6 +325,8 @@ class LivermoreStrategy(AlphaStrategy):
         self.trail_clear_count = 0
         self.profit_lock_count = 0
         self.early_zone_exit_count = 0
+        self._bar_reason: dict[str, str] = {}
+        self.trade_reason_by_id: dict[str, str] = {}
         lock_msg = ""
         if self.early_zone_giveback_pct > 0:
             lock_msg = (
@@ -391,6 +393,7 @@ class LivermoreStrategy(AlphaStrategy):
         )
 
         targets: dict[str, int] = {vt: 0 for vt in bars}
+        reasons: dict[str, str] = {}
         n_opening = 0
 
         for vt_symbol, bar in bars.items():
@@ -410,6 +413,9 @@ class LivermoreStrategy(AlphaStrategy):
                     if sh >= MIN_LOT:
                         self.pyramid_stage[vt_symbol] = 1
                         targets[vt_symbol] = sh
+                        reasons[vt_symbol] = (
+                            f"ML Top{TOP_N}+{self.breakout_window}日突破建仓"
+                        )
                         n_opening += 1
                 continue
 
@@ -424,6 +430,7 @@ class LivermoreStrategy(AlphaStrategy):
             pnl = (price - cost) / cost
             if pnl <= -self.stop_loss_pct:
                 targets[vt_symbol] = 0
+                reasons[vt_symbol] = f"止损{self.stop_loss_pct:.0%}清仓"
                 self.stop_count += 1
                 continue
 
@@ -437,12 +444,18 @@ class LivermoreStrategy(AlphaStrategy):
                     # 吐回峰值利润的 α：清仓价 = 高点 - (高点-成本)×α
                     if (peak - price) >= (peak - cost) * self.early_zone_giveback_pct:
                         targets[vt_symbol] = 0
+                        reasons[vt_symbol] = (
+                            f"早期区吐回峰值利润{self.early_zone_giveback_pct:.0%}清仓"
+                        )
                         self.early_zone_exit_count += 1
                         continue
                 elif self.early_zone_pullback_pct > 0 and peak > 0:
                     pullback = (peak - price) / peak
                     if pullback >= self.early_zone_pullback_pct:
                         targets[vt_symbol] = 0
+                        reasons[vt_symbol] = (
+                            f"早期区从高点回撤{self.early_zone_pullback_pct:.0%}清仓"
+                        )
                         self.early_zone_exit_count += 1
                         continue
 
@@ -456,6 +469,9 @@ class LivermoreStrategy(AlphaStrategy):
                     self.profit_lock_armed[vt_symbol] = True
                 if self.profit_lock_armed.get(vt_symbol) and pnl <= self.profit_lock_exit_pct:
                     targets[vt_symbol] = 0
+                    reasons[vt_symbol] = (
+                        f"盈利锁利回落至{self.profit_lock_exit_pct:.0%}清仓"
+                    )
                     self.profit_lock_count += 1
                     continue
 
@@ -465,8 +481,13 @@ class LivermoreStrategy(AlphaStrategy):
             if self.trail_armed.get(vt_symbol) and peak > cost:
                 if self.trail_giveback_pct > 0:
                     hit = (peak - price) >= (peak - cost) * self.trail_giveback_pct
+                    trail_desc = f"移动止盈吐回峰值利润{self.trail_giveback_pct:.0%}"
                 else:
                     hit = peak > 0 and (peak - price) / peak >= self.trail_pullback_pct
+                    trail_desc = (
+                        f"移动止盈激活{self.trail_activate_pct:.0%}"
+                        f"后回撤{self.trail_pullback_pct:.0%}"
+                    )
                 if hit:
                     if not self.halved.get(vt_symbol, False):
                         half = round_lot(pos // 2)
@@ -475,9 +496,13 @@ class LivermoreStrategy(AlphaStrategy):
                         self.halved[vt_symbol] = True
                         self.half_count += 1
                         if half <= 0:
+                            reasons[vt_symbol] = f"{trail_desc}清仓"
                             self.trail_clear_count += 1
+                        else:
+                            reasons[vt_symbol] = f"{trail_desc}减半"
                     else:
                         targets[vt_symbol] = 0
+                        reasons[vt_symbol] = f"{trail_desc}减半后再清仓"
                         self.trail_clear_count += 1
                     continue
 
@@ -494,16 +519,21 @@ class LivermoreStrategy(AlphaStrategy):
                     if add_sh >= MIN_LOT:
                         self.pyramid_stage[vt_symbol] = 2
                         targets[vt_symbol] = round_lot(pos) + add_sh
+                        reasons[vt_symbol] = (
+                            f"相对上次买入涨满{self.add_spacing_pct:.0%}加仓"
+                        )
                         continue
 
             targets[vt_symbol] = round_lot(pos)
 
+        self._bar_reason = reasons
         for vt_symbol, bar in bars.items():
             self.set_target(vt_symbol, targets.get(vt_symbol, 0))
         self.execute_trading(bars, price_add=self.price_add_pct)
 
     def on_trade(self, trade: TradeData) -> None:
         vt_symbol = trade.vt_symbol
+        reason = self._bar_reason.get(vt_symbol, "")
         if trade.direction == Direction.LONG:
             old_pos = self.get_pos(vt_symbol) - trade.volume
             if old_pos <= 0:
@@ -512,8 +542,16 @@ class LivermoreStrategy(AlphaStrategy):
                 self.trail_armed[vt_symbol] = False
                 self.halved[vt_symbol] = False
                 self.profit_lock_armed[vt_symbol] = False
+                if not reason:
+                    reason = f"ML Top{TOP_N}+{self.breakout_window}日突破建仓"
             else:
                 self.add_count += 1
+                if not reason:
+                    reason = f"相对上次买入涨满{self.add_spacing_pct:.0%}加仓"
+        elif not reason:
+            reason = "策略卖出"
+        if trade.tradeid:
+            self.trade_reason_by_id[str(trade.tradeid)] = reason
         update_cost_and_high(self, trade)
 
 

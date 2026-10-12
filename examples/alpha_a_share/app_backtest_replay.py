@@ -56,7 +56,7 @@ POS_HEADERS = [
     "市值",
 ]
 
-TRADE_HEADERS = ["时间", "代码", "名称", "方向", "动作", "数量", "价格", "成交额", "盈亏比"]
+TRADE_HEADERS = ["时间", "代码", "名称", "方向", "动作", "数量", "价格", "成交额", "盈亏比", "理由"]
 
 ALPHA_LAB_PATH = os.path.join(PROJECT_DIR, "alpha_data")
 
@@ -354,7 +354,7 @@ def _trade_action_label(side: str, shares_before: float, volume: float) -> str:
 
 
 def _enrich_trade_rows(trades: pl.DataFrame, asof: str) -> list[list]:
-    """当日成交；含名称、建仓/加仓/减仓/清仓；卖出附相对成本盈亏比。"""
+    """当日成交；含名称、建仓/加仓/减仓/清仓、策略理由；卖出附相对成本盈亏比。"""
     if trades.is_empty():
         return []
     tt = trades.with_columns(pl.col("date").cast(pl.Utf8).str.slice(0, 10).alias("d"))
@@ -382,6 +382,7 @@ def _enrich_trade_rows(trades: pl.DataFrame, asof: str) -> list[list]:
             pnl_pct_s = f"{(px / sell_cost - 1.0) * 100:+.2f}%"
         else:
             pnl_pct_s = "—"
+        reason = (r.get("reason") or "").strip() or "—"
         rows.append(
             [
                 str(r.get("datetime", ""))[:19],
@@ -393,6 +394,7 @@ def _enrich_trade_rows(trades: pl.DataFrame, asof: str) -> list[list]:
                 f"{px:.3f}",
                 f"{float(r.get('turnover') or 0):,.2f}",
                 pnl_pct_s,
+                reason,
             ]
         )
     return rows

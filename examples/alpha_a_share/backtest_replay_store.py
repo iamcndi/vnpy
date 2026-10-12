@@ -82,12 +82,19 @@ def save_engine_replay(
     run_dir = root / run_id
     run_dir.mkdir(parents=True, exist_ok=True)
 
-    # trades
+    # trades（理由来自策略 trade_reason_by_id，按 tradeid 对齐）
+    reason_map: dict[str, str] = {}
+    strategy = getattr(engine, "strategy", None)
+    if strategy is not None:
+        raw = getattr(strategy, "trade_reason_by_id", None) or {}
+        reason_map = {str(k): str(v) for k, v in raw.items()}
+
     trade_rows = []
     for t in engine.trades.values():
         if not t.datetime:
             continue
         side = "买入" if t.direction == Direction.LONG else "卖出"
+        tid = str(t.tradeid) if t.tradeid is not None else ""
         trade_rows.append(
             {
                 "datetime": t.datetime,
@@ -99,7 +106,8 @@ def save_engine_replay(
                 "price": float(t.price),
                 "volume": float(t.volume),
                 "turnover": float(t.price) * float(t.volume),
-                "tradeid": t.tradeid,
+                "tradeid": tid,
+                "reason": reason_map.get(tid, ""),
             }
         )
     trades_df = pl.DataFrame(trade_rows) if trade_rows else pl.DataFrame(
@@ -114,6 +122,7 @@ def save_engine_replay(
             "volume": pl.Float64,
             "turnover": pl.Float64,
             "tradeid": pl.Utf8,
+            "reason": pl.Utf8,
         }
     )
     trades_df.write_parquet(run_dir / "trades.parquet")
